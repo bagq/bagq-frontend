@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="eng">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BAG-Q Driver</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+    <!-- Leaflet Routing Machine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; }
+
+        #mainHeader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: #f2f2f2;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 40px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            z-index: 2000;
+            box-sizing: border-box;
+        }
+
+        #map {
+            height: calc(100vh - 60px);
+            margin-top: 60px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        #driverPanel {
+            position: absolute;
+            top: calc(50% + 30px);
+            left: 20px;
+            transform: translateY(-50%);
+            width: 280px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+            z-index: 10000;
+        }
+
+        .status-badge {
+            font-weight: bold;
+        }
+
+        button { cursor: pointer; }
+    </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div id="mainHeader">
+    <div>
+        <strong>BAG-Q</strong>
+    </div>
+
+    <div>
+        <strong id="welcomeText"></strong>
+        <button class="btn btn-sm btn-outline-danger ms-3" onclick="logout()">Logout</button>
+    </div>
+</div>
+
+<!-- DRIVER PANEL -->
+<div id="driverPanel">
+    <h5>BAG-Q Driver</h5>
+    <hr>
+    <p><strong>Route:</strong> Irisan–Quirino</p>
+    <p>
+        <strong>Status:</strong>
+        <span id="statusText" class="status-badge text-success">Available</span>
+    </p>
+    <div class="d-grid gap-2">
+        <button class="btn btn-success" onclick="startTrip()">Start Trip</button>
+        <button class="btn btn-danger" onclick="endTrip()">End Trip</button>
+    </div>
+    <hr>
+    <a href="index.html" class="btn btn-secondary w-100">Back to Map</a>
+</div>
+
+<div id="map"></div>
+
+<script>
+/* ===============================
+   🔐 LOGIN VERIFICATION
+================================== */
+
+const loggedDriver = JSON.parse(localStorage.getItem("loggedInDriver"));
+
+if (!loggedDriver) {
+    alert("Access denied. Please login first.");
+    window.location.href = "login.html";
+}
+
+// Show driver's name and plate
+document.getElementById("welcomeText").textContent =
+    "Welcome, " + loggedDriver.username + " (" + loggedDriver.plate + ")";
+
+function logout() {
+    localStorage.removeItem("loggedInDriver");
+    window.location.href = "login.html";
+}
+
+/* ===============================
+   🗺 MAP SYSTEM
+================================== */
+
+const jeepneyIcon = L.icon({
+    iconUrl: 'jeepney.png',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+});
+
+const terminalIcon = L.icon({
+    iconUrl: 'terminal.png',
+    iconSize: [55, 55],
+    iconAnchor: [27, 55],
+    popupAnchor: [0, -50]
+});
+
+const map = L.map("map", { zoomControl: true }).setView([16.415, 120.575], 14);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors"
+}).addTo(map);
+
+// Terminal coordinates
+const irisanTerminal1 = [16.4161384, 120.5573176];
+const irisanTerminal2 = [16.4130536, 120.5934281];
+
+// Markers
+L.marker(irisanTerminal1, {icon: terminalIcon}).addTo(map).bindPopup("<b>Irisan Terminal</b>");
+L.marker(irisanTerminal2, {icon: terminalIcon}).addTo(map).bindPopup("<b>Quirino Terminal</b>");
+
+// Driver marker
+let driverMarker = L.marker(irisanTerminal1, {icon: jeepneyIcon}).addTo(map);
+
+// Routing
+L.Routing.control({
+    waypoints: [
+        L.latLng(irisanTerminal1[0], irisanTerminal1[1]),
+        L.latLng(irisanTerminal2[0], irisanTerminal2[1])
+    ],
+    routeWhileDragging: false,
+    show: false,
+    addWaypoints: false,
+    draggableWaypoints: false,
+    lineOptions: {
+        styles: [{ color: 'blue', opacity: 0.7, weight: 5 }]
+    }
+}).addTo(map);
+
+let trackingInterval = null;
+let status = "Available";
+
+function updateStatusUI() {
+    const statusText = document.getElementById("statusText");
+    if (status === "Available") {
+        statusText.textContent = "Available";
+        statusText.className = "status-badge text-success";
+    } else {
+        statusText.textContent = "On Route";
+        statusText.className = "status-badge text-warning";
+    }
+}
+
+function startTrip() {
+    status = "On Route";
+    updateStatusUI();
+
+    if (navigator.geolocation) {
+        trackingInterval = setInterval(() => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    driverMarker.setLatLng([lat, lng]);
+                },
+                (err) => console.error(err),
+                { enableHighAccuracy: true }
+            );
+        }, 5000);
+    }
+}
+
+function endTrip() {
+    status = "Available";
+    updateStatusUI();
+    if (trackingInterval) clearInterval(trackingInterval);
+}
+</script>
+
+</body>
+</html>
