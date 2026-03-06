@@ -104,54 +104,59 @@ Already have account?
 </form>
 </div>
 
-<script>
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-const roleSelect=document.getElementById("role");
-const driverFields=document.getElementById("driverFields");
+const SUPABASE_URL = "https://jiypktabinncpbhoulte.supabase.co";
+const SUPABASE_ANON_KEY = "PUT YOUR ANON KEY HERE";
 
-/* Show driver fields if driver role */
-roleSelect.addEventListener("change",()=>{
-if(roleSelect.value==="driver"){
-driverFields.style.display="block";
-}else{
-driverFields.style.display="none";
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Role toggle */
+const roleSelect = document.getElementById("role");
+const driverFields = document.getElementById("driverFields");
+
+roleSelect.addEventListener("change", () => {
+    driverFields.style.display =
+        roleSelect.value === "driver" ? "block" : "none";
 });
 
 /* Register Submit */
-document.getElementById("registerForm").addEventListener("submit",async e=>{
-e.preventDefault();
+document.getElementById("registerForm").addEventListener("submit", async e => {
+    e.preventDefault();
 
-const data={
-fullName:document.getElementById("fullName").value,
-role:document.getElementById("role").value,
-username:document.getElementById("username").value,
-email:document.getElementById("email").value,
-password:document.getElementById("password").value,
-plateNumber:document.getElementById("plateNumber")?.value || null,
-seatingCapacity:document.getElementById("seatingCapacity")?.value || null,
-jeepneyType:document.getElementById("jeepneyType")?.value || null
-};
+    const errorBox = document.getElementById("errorMsg");
+    errorBox.innerText = "";
 
-const res=await fetch("http://localhost:5000/register",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify(data)
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const fullName = document.getElementById("fullName").value;
+    const username = document.getElementById("username").value;
+    const role = document.getElementById("role").value;
+
+    try {
+
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    full_name: fullName,
+                    username: username,
+                    role: role
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        alert("Registration successful! Please check email verification.");
+        window.location.href = "login.html";
+
+    } catch (err) {
+        errorBox.innerText = err.message;
+    }
 });
-
-const result=await res.json();
-
-if(res.ok){
-alert("Registration successful!");
-window.location.href="login.html";
-}else{
-document.getElementById("errorMsg").innerText=result.message;
-}
-
-});
-
 </script>
 
 </body>
