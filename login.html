@@ -57,11 +57,34 @@ No account?
 </div>
 
 <script>
-document.getElementById("loginForm").addEventListener("submit", function(e){
+
+document.getElementById("loginForm").addEventListener("submit",async e=>{
 e.preventDefault();
 
-window.location.href="index.html";
+const data={
+username:document.getElementById("username").value,
+password:document.getElementById("password").value
+};
+
+const res=await fetch("https://bagq123.vercel.app/login",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify(data)
 });
+
+const result=await res.json();
+
+if(res.ok){
+localStorage.setItem("currentUser",JSON.stringify(result.user));
+window.location.href="index.html";
+}else{
+document.getElementById("errorMsg").innerText=result.message;
+}
+
+});
+
 </script>
 
 </body>
