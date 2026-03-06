@@ -1,45 +1,41 @@
 <script>
 
+const SUPABASE_URL = "https://jiypktabinncpbhoulte.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImppeXBrdGFiaW5uY3BiaG91bHRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTA4NjgsImV4cCI6MjA4ODI4Njg2OH0.Pty4CL9Tfw5afYhQ0JfOrF2UyYj4JYyRBLrndk0cTvk";
+
+const supabaseClient = supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+);
+
 document.getElementById("loginForm").addEventListener("submit", async e => {
     e.preventDefault();
 
     const errorBox = document.getElementById("errorMsg");
     errorBox.innerText = "";
 
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
     try {
-        const username = document.getElementById("username").value.trim();
-        const password = document.getElementById("password").value;
 
-        console.log("Sending login request...");
-
-        const res = await fetch("https://bagq123.vercel.app/login", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ username, password })
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: username,
+            password: password
         });
 
-        console.log("Response status:", res.status);
+        if (error) throw error;
 
-        const result = await res.json();
-        console.log("Server response:", result);
+        console.log("Login success:", data);
 
-        if (!res.ok) {
-            throw new Error(result.message || "Login failed");
-        }
+        localStorage.setItem("currentUser", JSON.stringify(data.user));
 
-        if (result.user) {
-            localStorage.setItem("currentUser", JSON.stringify(result.user));
-            window.location.href = "index.html";
-        } else {
-            throw new Error("Invalid server response");
-        }
+        window.location.href = "index.html";
 
     } catch (err) {
-        console.error("Login error:", err);
         errorBox.innerText = err.message;
     }
+
 });
 
 </script>
