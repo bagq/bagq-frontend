@@ -66,7 +66,7 @@ username:document.getElementById("username").value,
 password:document.getElementById("password").value
 };
 
-const res=await fetch("http://localhost:5000/login",{
+const res=await fetch("https://bagq123.vercel.app/login",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -78,7 +78,7 @@ const result=await res.json();
 
 if(res.ok){
 localStorage.setItem("currentUser",JSON.stringify(result.user));
-window.location.href="index.html";
+window.location.href="map.html";
 }else{
 document.getElementById("errorMsg").innerText=result.message;
 }
