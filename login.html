@@ -58,31 +58,43 @@ No account?
 
 <script>
 
-document.getElementById("loginForm").addEventListener("submit",async e=>{
-e.preventDefault();
+document.getElementById("loginForm").addEventListener("submit", async e => {
+    e.preventDefault();
 
-const data={
-username:document.getElementById("username").value,
-password:document.getElementById("password").value
-};
+    const errorBox = document.getElementById("errorMsg");
+    errorBox.innerText = "";
 
-const res=await fetch("https://bagq123.vercel.app/login",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify(data)
-});
+    try {
+        const data = {
+            username: document.getElementById("username").value.trim(),
+            password: document.getElementById("password").value
+        };
 
-const result=await res.json();
+        const res = await fetch("https://bagq123.vercel.app/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
 
-if(res.ok){
-localStorage.setItem("currentUser",JSON.stringify(result.user));
-window.location.href="index.html";
-}else{
-document.getElementById("errorMsg").innerText=result.message;
-}
+        const result = await res.json();
 
+        if (!res.ok) {
+            throw new Error(result.message || "Login failed");
+        }
+
+        // Make sure user exists in response
+        if (result.user) {
+            localStorage.setItem("currentUser", JSON.stringify(result.user));
+            window.location.href = "index.html";
+        } else {
+            throw new Error("Invalid server response");
+        }
+
+    } catch (err) {
+        errorBox.innerText = err.message;
+    }
 });
 
 </script>
