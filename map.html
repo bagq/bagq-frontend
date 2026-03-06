@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BAG-Q Moderator Dashboard</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+
+body{
+font-family: Arial;
+margin:0;
+background:#f5f5f5;
+}
+
+header{
+background:#2c3e50;
+color:white;
+padding:15px;
+font-size:20px;
+}
+
+.container{
+display:flex;
+}
+
+.sidebar{
+width:300px;
+background:white;
+padding:20px;
+border-right:1px solid #ddd;
+}
+
+#map{
+height:100vh;
+width:100%;
+}
+
+input,select,button{
+width:100%;
+padding:10px;
+margin-top:10px;
+}
+
+.jeep{
+margin-top:10px;
+padding:10px;
+border:1px solid #ddd;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+Moderator Dashboard
+</header>
+
+<div class="container">
+
+<div class="sidebar">
+
+<h3>Register Jeepney</h3>
+
+<input id="plate" placeholder="Plate Number">
+
+<input id="route" placeholder="Route">
+
+<input id="capacity" type="number" placeholder="Seating Capacity">
+
+<select id="type">
+<option value="traditional">Traditional</option>
+<option value="modern">Modern</option>
+</select>
+
+<button onclick="registerJeep()">Register Jeepney</button>
+
+<hr>
+
+<h3>Active Jeepneys</h3>
+
+<div id="jeepList"></div>
+
+</div>
+
+<div id="map"></div>
+
+</div>
+
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<script>
+
+const SUPABASE_URL = "https://jiypktabinncpbhoulte.supabase.co"
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImppeXBrdGFiaW5uY3BiaG91bHRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MTA4NjgsImV4cCI6MjA4ODI4Njg2OH0.Pty4CL9Tfw5afYhQ0JfOrF2UyYj4JYyRBLrndk0cTvk"
+
+const supabase = supabase.createClient(SUPABASE_URL,SUPABASE_KEY)
+
+
+// MAP
+
+const map = L.map('map').setView([16.4023,120.5960],13)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+maxZoom:19
+}).addTo(map)
+
+let markers={}
+
+
+// LOAD JEEPNEYS
+
+async function loadJeepneys(){
+
+const {data,error}=await supabase
+.from("jeepneys")
+.select("*")
+
+const list=document.getElementById("jeepList")
+
+list.innerHTML=""
+
+data.forEach(j=>{
+
+// sidebar list
+
+const div=document.createElement("div")
+div.className="jeep"
+
+div.innerHTML=
+`
+<b>${j.plate_number}</b><br>
+Route: ${j.route}<br>
+Status: ${j.status}
+`
+
+list.appendChild(div)
+
+
+// map marker
+
+if(j.lat && j.lng){
+
+if(!markers[j.plate_number]){
+
+markers[j.plate_number]=L.marker([j.lat,j.lng])
+.addTo(map)
+.bindPopup(j.plate_number)
+
+}else{
+
+markers[j.plate_number]
+.setLatLng([j.lat,j.lng])
+
+}
+
+}
+
+})
+
+}
+
+loadJeepneys()
+
+
+// REALTIME TRACKING
+
+supabase
+.channel("jeepneys")
+.on(
+"postgres_changes",
+{
+event:"UPDATE",
+schema:"public",
+table:"jeepneys"
+},
+payload=>{
+
+const j=payload.new
+
+if(markers[j.plate_number]){
+
+markers[j.plate_number]
+.setLatLng([j.lat,j.lng])
+
+}else{
+
+markers[j.plate_number]=L.marker([j.lat,j.lng])
+.addTo(map)
+
+}
+
+})
+.subscribe()
+
+
+// REGISTER JEEP
+
+async function registerJeep(){
+
+const plate=document.getElementById("plate").value
+const route=document.getElementById("route").value
+const capacity=document.getElementById("capacity").value
+const type=document.getElementById("type").value
+
+await supabase
+.from("jeepneys")
+.insert([
+{
+plate_number:plate,
+route:route,
+capacity:capacity,
+type:type,
+status:"Available"
+}
+])
+
+alert("Jeepney Registered")
+
+loadJeepneys()
+
+}
+
+</script>
+
+</body>
+</html>
