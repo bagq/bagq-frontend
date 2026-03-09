@@ -1,208 +1,381 @@
 <!DOCTYPE html>
-<html lang="eng">
+<html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BAG-Q Driver</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-
-    <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-
-    <!-- Leaflet Routing Machine -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
-        html, body { margin: 0; padding: 0; height: 100%; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 
         #mainHeader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 60px;
-            background-color: #f2f2f2;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 40px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-            z-index: 2000;
-            box-sizing: border-box;
+            position: fixed; top: 0; left: 0; width: 100%; height: 56px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); z-index: 2000;
         }
+        #mainHeader .brand { font-weight: 700; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+        #mainHeader .header-right { display: flex; align-items: center; gap: 10px; }
+        #welcomeText { font-size: 0.85rem; color: rgba(255,255,255,0.9); }
 
-        #map {
-            height: calc(100vh - 60px);
-            margin-top: 60px;
-            width: 100%;
-            position: relative;
-            z-index: 1;
-        }
+        #map { height: calc(100vh - 56px); margin-top: 56px; width: 100%; position: relative; z-index: 1; }
 
         #driverPanel {
-            position: absolute;
-            top: calc(50% + 30px);
-            left: 20px;
-            transform: translateY(-50%);
-            width: 280px;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-            z-index: 10000;
+            position: fixed; top: 50%; left: 20px; transform: translateY(-50%);
+            width: 280px; background: #fff; padding: 24px 20px; border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12); z-index: 1500;
         }
+        #driverPanel .panel-title {
+            font-size: 1.1rem; font-weight: 700; color: #2c3e50;
+            display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+        }
+        #driverPanel .panel-title i { color: #667eea; }
+
+        .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.9rem; }
+        .info-row .label { color: #888; font-weight: 500; }
 
         .status-badge {
-            font-weight: bold;
+            display: inline-block; padding: 4px 14px; border-radius: 20px;
+            font-size: 0.82rem; font-weight: 600; color: #fff;
+        }
+        .status-badge.available { background: #28a745; }
+        .status-badge.on-route { background: #ffc107; color: #333; }
+        .status-badge.offline { background: #dc3545; }
+
+        .gps-indicator {
+            display: flex; align-items: center; gap: 6px; font-size: 0.8rem;
+            color: #888; margin-top: 10px; padding: 8px 12px; background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .gps-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .gps-dot.active { background: #28a745; box-shadow: 0 0 6px rgba(40,167,69,0.4); }
+        .gps-dot.inactive { background: #dc3545; }
+
+        .btn-trip {
+            border-radius: 10px; font-weight: 600; min-height: 42px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
 
-        button { cursor: pointer; }
+        #panelToggle {
+            display: none; position: fixed; bottom: 20px; right: 20px;
+            width: 52px; height: 52px; border-radius: 50%; border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff; font-size: 1.2rem; z-index: 1600;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.4); cursor: pointer;
+        }
+
+        #reconnectBanner {
+            position: fixed; top: 56px; left: 0; width: 100%;
+            background: linear-gradient(135deg, #f7971e, #ffd200); color: #333;
+            text-align: center; padding: 8px; font-size: 0.85rem; font-weight: 600;
+            z-index: 2050; display: none;
+        }
+
+        #toastContainer { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .toast-msg {
+            padding: 12px 20px; border-radius: 10px; color: #fff; margin-bottom: 8px;
+            animation: slideIn 0.3s; max-width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            font-size: 0.9rem; display: flex; align-items: center; gap: 8px;
+        }
+        .toast-msg.success { background: #28a745; }
+        .toast-msg.error { background: #dc3545; }
+        .toast-msg.info { background: #17a2b8; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        @media (max-width: 768px) {
+            #mainHeader { padding: 0 12px; }
+            #mainHeader .brand { font-size: 1rem; }
+            #welcomeText { max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+            #panelToggle { display: block; }
+
+            #driverPanel {
+                position: fixed; bottom: 0; left: 0; right: 0;
+                width: 100%; top: auto; transform: none;
+                border-radius: 20px 20px 0 0; max-height: 64px;
+                overflow: hidden; transition: max-height 0.3s ease;
+                padding: 16px 20px;
+            }
+            #driverPanel.panel-expanded { max-height: 75vh; overflow-y: auto; }
+            #driverPanel .panel-handle {
+                width: 40px; height: 4px; background: #ddd; border-radius: 2px;
+                margin: 0 auto 12px; display: block;
+            }
+        }
+        @media (min-width: 769px) {
+            #driverPanel .panel-handle { display: none; }
+        }
     </style>
 </head>
 
 <body>
 
-<!-- HEADER -->
+<div id="toastContainer"></div>
+<div id="reconnectBanner"><i class="fas fa-wifi"></i> Connection lost. Reconnecting...</div>
+
 <div id="mainHeader">
-    <div>
-        <strong>BAG-Q</strong>
-    </div>
-
-    <div>
-        <strong id="welcomeText"></strong>
-        <button class="btn btn-sm btn-outline-danger ms-3" onclick="logout()">Logout</button>
+    <span class="brand"><i class="fas fa-bus"></i> BAG-Q Driver</span>
+    <div class="header-right">
+        <span id="welcomeText"></span>
+        <button class="btn btn-sm btn-outline-light" style="border-radius:8px;font-size:0.8rem;font-weight:600" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
     </div>
 </div>
 
-<!-- DRIVER PANEL -->
 <div id="driverPanel">
-    <h5>BAG-Q Driver</h5>
-    <hr>
-    <p><strong>Route:</strong> Irisan–Quirino</p>
-    <p>
-        <strong>Status:</strong>
-        <span id="statusText" class="status-badge text-success">Available</span>
-    </p>
-    <div class="d-grid gap-2">
-        <button class="btn btn-success" onclick="startTrip()">Start Trip</button>
-        <button class="btn btn-danger" onclick="endTrip()">End Trip</button>
+    <span class="panel-handle"></span>
+    <div class="panel-title"><i class="fas fa-gauge-high"></i> Driver Panel</div>
+
+    <div class="info-row">
+        <span class="label"><i class="fas fa-route"></i> Route</span>
+        <span style="font-weight:600;color:#2c3e50">Irisan - Quirino</span>
     </div>
-    <hr>
-    <a href="index.html" class="btn btn-secondary w-100">Back to Map</a>
+    <div class="info-row">
+        <span class="label"><i class="fas fa-signal"></i> Status</span>
+        <span id="statusText" class="status-badge available">Available</span>
+    </div>
+
+    <div class="d-grid gap-2 mt-3">
+        <button id="startBtn" class="btn btn-success btn-trip" onclick="startTrip()"><i class="fas fa-play"></i> Start Trip</button>
+        <button id="endBtn" class="btn btn-danger btn-trip" onclick="endTrip()"><i class="fas fa-stop"></i> End Trip</button>
+    </div>
+
+    <div class="gps-indicator">
+        <span class="gps-dot inactive" id="gpsDot"></span>
+        <span id="gpsText">GPS: Inactive</span>
+    </div>
+
+    <hr style="margin:14px 0;border-color:#eee">
+    <a href="index.html" class="btn btn-outline-secondary w-100 btn-sm" style="border-radius:8px"><i class="fas fa-map"></i> Back to Map</a>
 </div>
+
+<button id="panelToggle" onclick="togglePanel()"><i class="fas fa-bars"></i></button>
 
 <div id="map"></div>
 
-<script>
-/* ===============================
-   🔐 LOGIN VERIFICATION
-================================== */
+<script type="module">
+const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
-const loggedDriver = JSON.parse(localStorage.getItem("loggedInDriver"));
-
-if (!loggedDriver) {
-    alert("Access denied. Please login first.");
-    window.location.href = "login.html";
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    const icon = type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+    toast.className = 'toast-msg ' + type;
+    toast.innerHTML = '<i class="fas ' + icon + '"></i> ' + message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
 }
 
-// Show driver's name and plate
-document.getElementById("welcomeText").textContent =
-    "Welcome, " + loggedDriver.username + " (" + loggedDriver.plate + ")";
+// Login verification
+const loggedDriver = JSON.parse(localStorage.getItem("loggedInDriver"));
+if (!loggedDriver) {
+    showToast('Access denied. Redirecting to login...', 'error');
+    setTimeout(() => window.location.href = "login.html", 1500);
+}
+
+document.getElementById("welcomeText").textContent = loggedDriver ? loggedDriver.username + " (" + loggedDriver.plate + ")" : "";
 
 function logout() {
-    localStorage.removeItem("loggedInDriver");
+    localStorage.clear();
     window.location.href = "login.html";
 }
+window.logout = logout;
 
-/* ===============================
-   🗺 MAP SYSTEM
-================================== */
+function togglePanel() {
+    document.getElementById('driverPanel').classList.toggle('panel-expanded');
+}
+window.togglePanel = togglePanel;
 
-const jeepneyIcon = L.icon({
-    iconUrl: 'jeepney.png',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
+// --- Server API helpers (bypass RLS) ---
+async function apiUpdateStatus(plateNumber, status) {
+    try {
+        const res = await fetch(API_URL + '/api/jeepneys/' + encodeURIComponent(plateNumber) + '/status', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        return await res.json();
+    } catch (err) {
+        console.error('Status update error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+async function apiUpdateLocation(jeepneyId, plateNumber, latitude, longitude, status) {
+    try {
+        const body = { plate_number: plateNumber, latitude, longitude, status };
+        if (jeepneyId) body.jeepney_id = jeepneyId;
+        const res = await fetch(API_URL + '/api/locations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        return await res.json();
+    } catch (err) {
+        console.error('Location update error:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+// --- Icon preload with fallback ---
+function preloadIcon(src, size, anchor, popupAnchor) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve(L.icon({ iconUrl: src, iconSize: size, iconAnchor: anchor, popupAnchor: popupAnchor || [0, 0] }));
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+}
+
+let jeepIconResolved = null;
+let terminalIconResolved = null;
+
+Promise.all([
+    preloadIcon('jeep.png', [32, 32], [16, 16]),
+    preloadIcon('terminal.png', [55, 55], [27, 55], [0, -50])
+]).then(([jeepIcon, termIcon]) => {
+    jeepIconResolved = jeepIcon;
+    terminalIconResolved = termIcon;
+    initMap();
 });
 
-const terminalIcon = L.icon({
-    iconUrl: 'terminal.png',
-    iconSize: [55, 55],
-    iconAnchor: [27, 55],
-    popupAnchor: [0, -50]
-});
-
+// Map setup
 const map = L.map("map", { zoomControl: true }).setView([16.415, 120.575], 14);
-
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors"
+    attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-// Terminal coordinates
 const irisanTerminal1 = [16.4161384, 120.5573176];
 const irisanTerminal2 = [16.4130536, 120.5934281];
 
-// Markers
-L.marker(irisanTerminal1, {icon: terminalIcon}).addTo(map).bindPopup("<b>Irisan Terminal</b>");
-L.marker(irisanTerminal2, {icon: terminalIcon}).addTo(map).bindPopup("<b>Quirino Terminal</b>");
+let driverMarker;
 
-// Driver marker
-let driverMarker = L.marker(irisanTerminal1, {icon: jeepneyIcon}).addTo(map);
-
-// Routing
-L.Routing.control({
-    waypoints: [
-        L.latLng(irisanTerminal1[0], irisanTerminal1[1]),
-        L.latLng(irisanTerminal2[0], irisanTerminal2[1])
-    ],
-    routeWhileDragging: false,
-    show: false,
-    addWaypoints: false,
-    draggableWaypoints: false,
-    lineOptions: {
-        styles: [{ color: 'blue', opacity: 0.7, weight: 5 }]
+function initMap() {
+    // Terminal markers
+    function addTerminal(coords, label) {
+        if (terminalIconResolved) {
+            L.marker(coords, { icon: terminalIconResolved }).addTo(map).bindPopup("<b>" + label + "</b>");
+        } else {
+            L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
+        }
     }
-}).addTo(map);
+    addTerminal(irisanTerminal1, "Irisan Terminal");
+    addTerminal(irisanTerminal2, "Quirino Terminal");
+
+    // Driver marker
+    if (jeepIconResolved) {
+        driverMarker = L.marker(irisanTerminal1, { icon: jeepIconResolved }).addTo(map);
+    } else {
+        driverMarker = L.circleMarker(irisanTerminal1, { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+    }
+
+    // Route line
+    L.Routing.control({
+        waypoints: [L.latLng(irisanTerminal1[0], irisanTerminal1[1]), L.latLng(irisanTerminal2[0], irisanTerminal2[1])],
+        routeWhileDragging: false, show: false, addWaypoints: false, draggableWaypoints: false,
+        lineOptions: { styles: [{ color: '#667eea', opacity: 0.7, weight: 5 }] }
+    }).addTo(map);
+}
 
 let trackingInterval = null;
 let status = "Available";
 
 function updateStatusUI() {
-    const statusText = document.getElementById("statusText");
-    if (status === "Available") {
-        statusText.textContent = "Available";
-        statusText.className = "status-badge text-success";
-    } else {
-        statusText.textContent = "On Route";
-        statusText.className = "status-badge text-warning";
-    }
+    const el = document.getElementById("statusText");
+    if (status === "Available") { el.textContent = "Available"; el.className = "status-badge available"; }
+    else if (status === "On Route") { el.textContent = "On Route"; el.className = "status-badge on-route"; }
+    else { el.textContent = "Offline"; el.className = "status-badge offline"; }
 }
 
-function startTrip() {
+function updateGPS(active) {
+    document.getElementById('gpsDot').className = 'gps-dot ' + (active ? 'active' : 'inactive');
+    document.getElementById('gpsText').textContent = 'GPS: ' + (active ? 'Tracking' : 'Inactive');
+}
+
+async function startTrip() {
+    if (!loggedDriver) return;
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+
     status = "On Route";
     updateStatusUI();
 
+    const result = await apiUpdateStatus(loggedDriver.plate, "On Route");
+    if (!result.success) {
+        showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-play"></i> Start Trip';
+    showToast('Trip started! GPS tracking active.', 'success');
+
     if (navigator.geolocation) {
+        updateGPS(true);
+        // Send initial position immediately
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                driverMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 15);
+                await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
+            },
+            (err) => { console.error("GPS error:", err); },
+            { enableHighAccuracy: true }
+        );
+        // Then track every 5s
         trackingInterval = setInterval(() => {
             navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
+                async (pos) => {
+                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
                     driverMarker.setLatLng([lat, lng]);
+                    await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
                 },
-                (err) => console.error(err),
+                (err) => { console.error("GPS error:", err); updateGPS(false); },
                 { enableHighAccuracy: true }
             );
         }, 5000);
+    } else {
+        showToast('GPS not available on this device', 'error');
+        updateGPS(false);
     }
 }
 
-function endTrip() {
+async function endTrip() {
+    if (!loggedDriver) return;
+    const btn = document.getElementById('endBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ending...';
+
     status = "Available";
     updateStatusUI();
-    if (trackingInterval) clearInterval(trackingInterval);
+
+    const result = await apiUpdateStatus(loggedDriver.plate, "Available");
+    if (!result.success) {
+        showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
+    }
+
+    if (trackingInterval) { clearInterval(trackingInterval); trackingInterval = null; }
+    updateGPS(false);
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-stop"></i> End Trip';
+    showToast('Trip ended.', 'info');
+}
+
+window.startTrip = startTrip;
+window.endTrip = endTrip;
+
+if (window.innerWidth <= 768) {
+    setTimeout(() => document.getElementById('driverPanel').classList.add('panel-expanded'), 500);
+    setTimeout(() => document.getElementById('driverPanel').classList.remove('panel-expanded'), 3000);
 }
 </script>
 

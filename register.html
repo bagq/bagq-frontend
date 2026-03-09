@@ -2,159 +2,320 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BAG-Q Register</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
 <style>
-body{
-min-height:100vh;
-display:flex;
-align-items:center;
-justify-content:center;
-background:#f5f6fa;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 15px;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-.card-auth{
-width:430px;
-background:white;
-padding:25px;
-border-radius:12px;
-box-shadow:0 6px 25px rgba(0,0,0,0.15);
+.card-auth {
+    width: 100%;
+    max-width: 440px;
+    background: #fff;
+    padding: 32px 28px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
 
-#driverFields{
-display:none;
+.card-auth .logo {
+    text-align: center;
+    margin-bottom: 6px;
 }
+
+.card-auth .logo i {
+    font-size: 2.2rem;
+    color: #667eea;
+}
+
+.card-auth h4 {
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.card-auth .subtitle {
+    color: #888;
+    font-size: 0.9rem;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.form-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #444;
+    margin-bottom: 4px;
+}
+
+.form-label i {
+    margin-right: 4px;
+    color: #667eea;
+    width: 16px;
+    text-align: center;
+}
+
+.form-control, .form-select {
+    min-height: 44px;
+    border-radius: 10px;
+    border: 1.5px solid #e0e0e0;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+
+.field-error {
+    color: #dc3545;
+    font-size: 0.8rem;
+    margin-top: 3px;
+}
+
+.password-wrapper { position: relative; }
+.password-toggle {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    border: none; background: none; cursor: pointer; color: #999; font-size: 0.85rem;
+    padding: 0;
+}
+.password-toggle:hover { color: #667eea; }
+
+.btn-register {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: #fff;
+    font-weight: 600;
+    min-height: 46px;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: opacity 0.2s, transform 0.1s;
+}
+.btn-register:hover { opacity: 0.9; color: #fff; }
+.btn-register:active { transform: scale(0.98); }
+.btn-register:disabled { opacity: 0.7; }
+
+.divider {
+    border: none;
+    border-top: 1.5px solid #eee;
+    margin: 14px 0;
+}
+
+#driverFields { display: none; }
+
+#toastContainer { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+.toast-msg {
+    padding: 12px 20px; border-radius: 10px; color: #fff; margin-bottom: 8px;
+    animation: slideIn 0.3s ease; max-width: 350px; word-wrap: break-word;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-size: 0.9rem;
+    display: flex; align-items: center; gap: 8px;
+}
+.toast-msg.success { background: #28a745; }
+.toast-msg.error { background: #dc3545; }
+.toast-msg.info { background: #17a2b8; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.auth-link { color: #667eea; font-weight: 600; text-decoration: none; }
+.auth-link:hover { color: #764ba2; text-decoration: underline; }
 </style>
 </head>
 
 <body>
 
+<div id="toastContainer"></div>
+
 <div class="card-auth">
 
-<h4 class="text-center mb-3">BAG-Q Register</h4>
+<div class="logo"><i class="fas fa-bus"></i></div>
+<h4 class="text-center mb-1">Create Account</h4>
+<p class="subtitle">Join BAG-Q to track jeepneys in real-time</p>
 
 <form id="registerForm">
 
 <div class="mb-2">
-<label>Full Name</label>
-<input id="fullName" class="form-control" required>
+<label class="form-label" for="fullName"><i class="fas fa-user"></i> Full Name</label>
+<input id="fullName" class="form-control" placeholder="Enter your full name" required>
+<div class="field-error" id="fullName-error"></div>
 </div>
 
 <div class="mb-2">
-<label>Role</label>
+<label class="form-label" for="role"><i class="fas fa-id-badge"></i> Role</label>
 <select id="role" class="form-select" required>
-<option value="">Select Role</option>
+<option value="">Select your role</option>
 <option value="commuter">Commuter</option>
 <option value="driver">Driver</option>
 <option value="dispatcher">Dispatcher</option>
 </select>
+<div class="field-error" id="role-error"></div>
 </div>
 
 <div class="mb-2">
-<label>Username</label>
-<input id="username" class="form-control" required>
+<label class="form-label" for="username"><i class="fas fa-at"></i> Username</label>
+<input id="username" class="form-control" placeholder="Choose a username" required>
+<div class="field-error" id="username-error"></div>
 </div>
 
 <div class="mb-2">
-<label>Email</label>
-<input id="email" type="email" class="form-control" required>
+<label class="form-label" for="email"><i class="fas fa-envelope"></i> Email</label>
+<input id="email" type="email" class="form-control" placeholder="your@email.com" required>
+<div class="field-error" id="email-error"></div>
 </div>
 
 <div class="mb-2">
-<label>Password</label>
-<input id="password" type="password" class="form-control" required>
+<label class="form-label" for="password"><i class="fas fa-lock"></i> Password</label>
+<div class="password-wrapper">
+    <input id="password" type="password" class="form-control" placeholder="Min. 6 characters" required>
+    <button type="button" id="togglePassword" class="password-toggle"><i class="fas fa-eye"></i></button>
+</div>
+<div class="field-error" id="password-error"></div>
 </div>
 
 <!-- DRIVER ONLY FIELDS -->
 <div id="driverFields">
-
-<hr>
+<hr class="divider">
+<p class="text-muted small mb-2"><i class="fas fa-truck"></i> Jeepney Details</p>
 
 <div class="mb-2">
-<label>Plate Number</label>
-<input id="plateNumber" class="form-control">
+<label class="form-label" for="plateNumber"><i class="fas fa-hashtag"></i> Plate Number</label>
+<input id="plateNumber" class="form-control" placeholder="e.g. ABC-1234">
+<div class="field-error" id="plateNumber-error"></div>
 </div>
 
 <div class="mb-2">
-<label>Seating Capacity</label>
-<input id="seatingCapacity" type="number" class="form-control">
+<label class="form-label" for="seatingCapacity"><i class="fas fa-users"></i> Seating Capacity</label>
+<input id="seatingCapacity" type="number" class="form-control" placeholder="e.g. 16" min="1" max="50">
 </div>
 
 <div class="mb-2">
-<label>Jeepney Type</label>
+<label class="form-label" for="jeepneyType"><i class="fas fa-bus-alt"></i> Jeepney Type</label>
 <select id="jeepneyType" class="form-select">
 <option value="traditional">Traditional</option>
 <option value="modern">Modern</option>
 </select>
 </div>
-
 </div>
 
-<div id="errorMsg" class="text-danger mb-2"></div>
+<button id="registerBtn" class="btn btn-register w-100 mt-3" type="submit">
+    <i class="fas fa-user-plus"></i> Create Account
+</button>
 
-<button class="btn btn-success w-100">Register</button>
-
-<p class="text-center mt-3">
-Already have account?
-<a href="login.html">Login</a>
+<p class="text-center mt-3 mb-0" style="font-size:0.9rem">
+Already have an account?
+<a href="login.html" class="auth-link">Sign In</a>
 </p>
 
 </form>
 </div>
 
 <script type="module">
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
-const SUPABASE_URL = "https://jiypktabinncpbhoulte.supabase.co";
-const SUPABASE_ANON_KEY = "PUT YOUR ANON KEY HERE";
+// Session check - use localStorage instead of broken profiles table
+const storedUser = localStorage.getItem("currentUser");
+if (storedUser) {
+    const user = JSON.parse(storedUser);
+    const role = user.user_metadata?.role;
+    if (role === 'driver') window.location.href = 'driver.html';
+    else window.location.href = 'index.html';
+}
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Toast system
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    const icon = type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+    toast.className = 'toast-msg ' + type;
+    toast.innerHTML = '<i class="fas ' + icon + '"></i> ' + message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
 
-/* Role toggle */
-const roleSelect = document.getElementById("role");
-const driverFields = document.getElementById("driverFields");
+// Field errors
+function showFieldError(fieldId, msg) {
+    const el = document.getElementById(fieldId + '-error');
+    if (el) el.textContent = msg;
+}
+function clearErrors() {
+    document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+}
 
-roleSelect.addEventListener("change", () => {
-    driverFields.style.display =
-        roleSelect.value === "driver" ? "block" : "none";
+// Password toggle
+document.getElementById('togglePassword').addEventListener('click', () => {
+    const pwd = document.getElementById('password');
+    const icon = document.querySelector('#togglePassword i');
+    if (pwd.type === 'password') { pwd.type = 'text'; icon.className = 'fas fa-eye-slash'; }
+    else { pwd.type = 'password'; icon.className = 'fas fa-eye'; }
 });
 
-/* Register Submit */
+// Role toggle
+const roleSelect = document.getElementById("role");
+roleSelect.addEventListener("change", () => {
+    document.getElementById("driverFields").style.display = roleSelect.value === "driver" ? "block" : "none";
+});
+
+// Validation
+function validateForm(fullName, role, username, email, password, plateNumber) {
+    let valid = true;
+    clearErrors();
+    if (fullName.length < 2) { showFieldError('fullName', 'Name must be at least 2 characters'); valid = false; }
+    if (!role) { showFieldError('role', 'Please select a role'); valid = false; }
+    if (username.length < 2) { showFieldError('username', 'Username must be at least 2 characters'); valid = false; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('email', 'Enter a valid email address'); valid = false; }
+    if (password.length < 6) { showFieldError('password', 'Password must be at least 6 characters'); valid = false; }
+    if (role === 'driver' && (!plateNumber || plateNumber.trim() === '')) { showFieldError('plateNumber', 'Plate number is required for drivers'); valid = false; }
+    return valid;
+}
+
+// Register submit
 document.getElementById("registerForm").addEventListener("submit", async e => {
     e.preventDefault();
 
-    const errorBox = document.getElementById("errorMsg");
-    errorBox.innerText = "";
-
+    const fullName = document.getElementById("fullName").value.trim();
+    const username = document.getElementById("username").value.trim();
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
-    const fullName = document.getElementById("fullName").value;
-    const username = document.getElementById("username").value;
     const role = document.getElementById("role").value;
+    const plateNumber = document.getElementById("plateNumber").value.trim();
+    const seatingCapacity = document.getElementById("seatingCapacity").value;
+    const jeepneyType = document.getElementById("jeepneyType").value;
+
+    if (!validateForm(fullName, role, username, email, password, plateNumber)) return;
+
+    const btn = document.getElementById('registerBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating account...';
 
     try {
-
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    full_name: fullName,
-                    username: username,
-                    role: role
-                }
-            }
+        const response = await fetch(API_URL + '/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, fullName, username, role, plateNumber, seatingCapacity, jeepneyType })
         });
 
-        if (error) throw error;
+        const result = await response.json();
 
-        alert("Registration successful! Please check email verification.");
-        window.location.href = "login.html";
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Registration failed');
+        }
+
+        showToast('Account created successfully!', 'success');
+        setTimeout(() => { window.location.href = "login.html"; }, 1500);
 
     } catch (err) {
-        errorBox.innerText = err.message;
+        showToast(err.message || 'Registration failed. Make sure the server is running.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
     }
 });
 </script>

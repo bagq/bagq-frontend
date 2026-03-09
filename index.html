@@ -1,230 +1,280 @@
 <!DOCTYPE html>
-<html lang="eng">
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BAG-Q</title>
+<title>BAG-Q - Jeepney Tracker</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
 <style>
-#mainHeader{
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:60px;
-background:#f2f2f2;
-display:flex;
-justify-content:space-between;
-align-items:center;
-padding:0 25px;
-box-shadow:0 2px 6px rgba(0,0,0,0.1);
-z-index:2000;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+
+#mainHeader {
+    position: fixed; top: 0; left: 0; width: 100%; height: 56px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); z-index: 2000;
 }
-#map{
-height:calc(100vh - 60px);
-margin-top:60px;
+#mainHeader .brand { font-weight: 700; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+#mainHeader .brand i { font-size: 1.3rem; }
+#mainHeader .nav-links { display: flex; gap: 8px; align-items: center; }
+#mainHeader .nav-links .btn { border-radius: 8px; font-size: 0.8rem; font-weight: 600; }
+
+#map { height: calc(100vh - 56px); margin-top: 56px; width: 100%; }
+
+#jeepCounter {
+    position: fixed; z-index: 2100; font-weight: 600;
+    background: #fff; padding: 10px 18px; border-radius: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.12); font-size: 0.9rem;
+    display: flex; align-items: center; gap: 8px;
+    transition: transform 0.3s;
 }
-#jeepCounter{
-position:absolute;
-top:70px;
-right:30px;
-background:white;
-padding:10px 15px;
-border-radius:10px;
-box-shadow:0 4px 10px rgba(0,0,0,0.2);
-z-index:2100;
-font-weight:bold;
+#jeepCounter i { color: #667eea; }
+#jeepCount { color: #667eea; font-weight: 700; font-size: 1.1rem; }
+
+@media (min-width: 769px) {
+    #jeepCounter { top: 68px; right: 16px; }
 }
+@media (max-width: 768px) {
+    #jeepCounter { bottom: 20px; left: 50%; transform: translateX(-50%); top: auto; right: auto; }
+    #mainHeader { padding: 0 12px; }
+    #mainHeader .brand { font-size: 1rem; }
+    .btn-sm { font-size: 0.75rem !important; padding: 4px 10px !important; }
+}
+
+#reconnectBanner {
+    position: fixed; top: 56px; left: 0; width: 100%;
+    background: linear-gradient(135deg, #f7971e, #ffd200); color: #333;
+    text-align: center; padding: 8px; font-size: 0.85rem; font-weight: 600;
+    z-index: 2050; display: none;
+}
+
+#toastContainer { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+.toast-msg {
+    padding: 12px 20px; border-radius: 10px; color: #fff; margin-bottom: 8px;
+    animation: slideIn 0.3s; max-width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    font-size: 0.9rem; display: flex; align-items: center; gap: 8px;
+}
+.toast-msg.success { background: #28a745; }
+.toast-msg.error { background: #dc3545; }
+.toast-msg.info { background: #17a2b8; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.pulse { animation: pulse 0.4s; }
+@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@media (max-width: 768px) {
+    .pulse { animation: pulseMobile 0.4s; }
+    @keyframes pulseMobile { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
+}
+
+.leaflet-popup-content { font-size: 0.9rem; line-height: 1.6; min-width: 160px; }
+.popup-plate { font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; color: #2c3e50; }
+.popup-status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; color: #fff; }
+.popup-status.on-route { background: #28a745; }
+.popup-status.available { background: #ffc107; color: #333; }
+.popup-eta { margin-top: 6px; font-size: 0.85rem; color: #555; }
+.popup-eta i { color: #667eea; }
 </style>
 </head>
 
 <body>
 
+<div id="toastContainer"></div>
+<div id="reconnectBanner"><i class="fas fa-wifi"></i> Connection lost. Reconnecting...</div>
+
 <div id="mainHeader">
-    <strong>BAG-Q</strong>
-    <div>
-        <a href="driver.html" class="btn btn-outline-dark btn-sm">Driver</a>
-        <a href="login.html" class="btn btn-outline-dark btn-sm">Login</a>
-    </div>
+    <span class="brand"><i class="fas fa-bus"></i> BAG-Q</span>
+    <div class="nav-links" id="navLinks"></div>
 </div>
 
-<div id="jeepCounter">Jeepneys on Road: 0</div>
+<div id="jeepCounter"><i class="fas fa-bus-alt"></i> Jeepneys on Road: <span id="jeepCount">0</span></div>
 <div id="map"></div>
 
-<script>
+<script type="module">
+import { supabase, subscribeToLocations } from './supabase-client.js';
 
-/* ==============================
-   📍 TERMINALS
-================================= */
+const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
-const irisanTerminal=[16.4161384,120.5573176];
-const quirinoTerminal=[16.4130536,120.5934281];
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    const icon = type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+    toast.className = 'toast-msg ' + type;
+    toast.innerHTML = '<i class="fas ' + icon + '"></i> ' + message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
 
-/* ==============================
-   🗺 INITIALIZE MAP
-================================= */
+// Auth-aware header (uses localStorage, not broken profiles table)
+function setupNav() {
+    const nav = document.getElementById('navLinks');
+    const stored = localStorage.getItem("currentUser");
+    if (stored) {
+        const user = JSON.parse(stored);
+        const meta = user.user_metadata || {};
+        const name = meta.username || user.email;
+        let html = '<span class="text-white me-2 d-none d-sm-inline" style="font-size:0.85rem;opacity:0.9"><i class="fas fa-user-circle"></i> ' + name + '</span>';
+        if (meta.role === 'driver') html += '<a href="driver.html" class="btn btn-light btn-sm"><i class="fas fa-gauge-high"></i> Dashboard</a> ';
+        html += '<button class="btn btn-outline-light btn-sm" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>';
+        nav.innerHTML = html;
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.clear();
+            window.location.reload();
+        });
+    } else {
+        nav.innerHTML = '<a href="login.html" class="btn btn-light btn-sm"><i class="fas fa-sign-in-alt"></i> Login</a>';
+    }
+}
+setupNav();
 
-const map=L.map("map").setView(irisanTerminal,14);
+const irisanTerminal = [16.4161384, 120.5573176];
+const quirinoTerminal = [16.4130536, 120.5934281];
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-attribution:"© OpenStreetMap contributors"
+const map = L.map("map").setView(irisanTerminal, 14);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-/* ==============================
-   👤 SHOW PASSENGER LOCATION
-================================= */
+// Icon fallbacks
+let jeepIconResolved = null;
+(function preloadJeepIcon() {
+    const img = new Image();
+    img.onload = () => { jeepIconResolved = L.icon({ iconUrl: 'jeep.png', iconSize: [32, 32], iconAnchor: [16, 16] }); };
+    img.onerror = () => { jeepIconResolved = null; };
+    img.src = 'jeep.png';
+})();
 
-const userIcon=L.icon({
-iconUrl:'user.png',
-iconSize:[30,30],
-iconAnchor:[15,15]
-});
-
-let userMarker=null;
-
-if(navigator.geolocation){
-navigator.geolocation.getCurrentPosition(
-(pos)=>{
-const lat=pos.coords.latitude;
-const lng=pos.coords.longitude;
-
-userMarker=L.marker([lat,lng],{icon:userIcon})
-.addTo(map)
-.bindPopup("You are here");
-
-map.setView([lat,lng],15);
-},
-(err)=>console.log(err),
-{enableHighAccuracy:true}
-);
+function makeJeepMarker(lat, lng) {
+    if (jeepIconResolved) return L.marker([lat, lng], { icon: jeepIconResolved });
+    return L.circleMarker([lat, lng], { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 });
 }
 
-/* ==============================
-   🚙 JEEP ICON
-================================= */
-
-const jeepIcon=L.icon({
-iconUrl:'jeepney.png',
-iconSize:[32,32],
-iconAnchor:[16,16]
-});
-
-/* ==============================
-   📏 DISTANCE FUNCTION
-================================= */
-
-function getDistance(lat1,lon1,lat2,lon2){
-const R=6371;
-const dLat=(lat2-lat1)*Math.PI/180;
-const dLon=(lon2-lon1)*Math.PI/180;
-const a=
-Math.sin(dLat/2)*Math.sin(dLat/2)+
-Math.cos(lat1*Math.PI/180)*
-Math.cos(lat2*Math.PI/180)*
-Math.sin(dLon/2)*Math.sin(dLon/2);
-const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-return R*c;
+// User location
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            const lat = pos.coords.latitude, lng = pos.coords.longitude;
+            L.circleMarker([lat, lng], { radius: 8, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 })
+                .addTo(map).bindPopup("<b>You are here</b>");
+            map.setView([lat, lng], 15);
+        },
+        err => console.log("Geolocation error:", err),
+        { enableHighAccuracy: true }
+    );
 }
 
-/* ==============================
-   🚙 LIVE JEEP SYSTEM
-================================= */
-
-let jeepMarkers={};
-let activeRoute=null;
-
-function loadLiveJeepneys(){
-
-let jeepCount=0;
-
-for(let key in localStorage){
-
-if(key.startsWith("live_")){
-
-const data=JSON.parse(localStorage.getItem(key));
-
-if(data.status==="On Route"){
-
-jeepCount++;
-
-if(!jeepMarkers[data.plate]){
-
-jeepMarkers[data.plate]=L.marker(
-[data.lat,data.lng],
-{icon:jeepIcon}
-).addTo(map);
-
-jeepMarkers[data.plate].on("click",()=>{
-showRoute(data.lat,data.lng,data.plate);
-});
-
-}else{
-
-jeepMarkers[data.plate]
-.setLatLng([data.lat,data.lng]);
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/* ETA */
-const distance=getDistance(
-data.lat,
-data.lng,
-quirinoTerminal[0],
-quirinoTerminal[1]
-);
-
-const avgSpeed=25;
-const etaMinutes=Math.round((distance/avgSpeed)*60);
-
-jeepMarkers[data.plate].bindPopup(
-"<b>Plate:</b> "+data.plate+
-"<br><b>Status:</b> "+data.status+
-"<br><b>ETA:</b> "+etaMinutes+" mins"+
-"<br><i>Click to view route</i>"
-);
-}
-}
+function buildPopup(plate, status, lat, lng) {
+    const distance = getDistance(lat, lng, quirinoTerminal[0], quirinoTerminal[1]);
+    const eta = Math.round((distance / 25) * 60);
+    const statusClass = status === 'On Route' ? 'on-route' : 'available';
+    return '<div class="popup-plate"><i class="fas fa-bus" style="color:#667eea"></i> ' + plate + '</div>' +
+        '<span class="popup-status ' + statusClass + '">' + status + '</span>' +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ETA: ~' + eta + ' min to Quirino</div>' +
+        '<small style="color:#aaa"><i class="fas fa-route"></i> Tap for route</small>';
 }
 
-document.getElementById("jeepCounter")
-.textContent="Jeepneys on Road: "+jeepCount;
+let jeepMarkers = {};
+let jeepLastSeen = {};
+let activeRoute = null;
+
+async function loadLiveJeepneys() {
+    try {
+        const res = await fetch(API_URL + '/api/locations');
+        const result = await res.json();
+        if (!result.success) { console.error("Error:", result.error); return; }
+        const locations = result.data;
+
+        let jeepCount = 0;
+        const activePlates = new Set();
+
+        locations.forEach(loc => {
+            if (loc.status === "On Route") {
+                jeepCount++;
+                activePlates.add(loc.plate_number);
+                jeepLastSeen[loc.plate_number] = Date.now();
+
+                if (!jeepMarkers[loc.plate_number]) {
+                    jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude).addTo(map);
+                    jeepMarkers[loc.plate_number].on("click", () => showRoute(loc.latitude, loc.longitude));
+                } else {
+                    jeepMarkers[loc.plate_number].setLatLng([loc.latitude, loc.longitude]);
+                }
+                jeepMarkers[loc.plate_number].bindPopup(buildPopup(loc.plate_number, loc.status, loc.latitude, loc.longitude));
+            }
+        });
+
+        Object.keys(jeepMarkers).forEach(plate => {
+            if (!activePlates.has(plate) || (Date.now() - (jeepLastSeen[plate] || 0)) > 60000) {
+                map.removeLayer(jeepMarkers[plate]);
+                delete jeepMarkers[plate];
+                delete jeepLastSeen[plate];
+            }
+        });
+
+        const countEl = document.getElementById('jeepCount');
+        const counterEl = document.getElementById('jeepCounter');
+        if (parseInt(countEl.textContent) !== jeepCount) {
+            counterEl.classList.add('pulse');
+            setTimeout(() => counterEl.classList.remove('pulse'), 400);
+        }
+        countEl.textContent = jeepCount;
+    } catch (err) {
+        console.error("loadLiveJeepneys error:", err);
+    }
 }
 
-setInterval(loadLiveJeepneys,3000);
+setInterval(loadLiveJeepneys, 5000);
+loadLiveJeepneys();
 
-/* ==============================
-   🛣 SHOW ROUTE ONLY WHEN CLICKED
-================================= */
-
-function showRoute(lat,lng,plate){
-
-if(activeRoute){
-map.removeControl(activeRoute);
+let subscription = null;
+function setupRealtime() {
+    subscription = subscribeToLocations((newLoc) => {
+        document.getElementById('reconnectBanner').style.display = 'none';
+        if (newLoc.status === "On Route") {
+            jeepLastSeen[newLoc.plate_number] = Date.now();
+            if (!jeepMarkers[newLoc.plate_number]) {
+                jeepMarkers[newLoc.plate_number] = makeJeepMarker(newLoc.latitude, newLoc.longitude).addTo(map);
+                jeepMarkers[newLoc.plate_number].on("click", () => showRoute(newLoc.latitude, newLoc.longitude));
+            } else {
+                jeepMarkers[newLoc.plate_number].setLatLng([newLoc.latitude, newLoc.longitude]);
+            }
+            jeepMarkers[newLoc.plate_number].bindPopup(buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude));
+        }
+    });
 }
+setupRealtime();
 
-activeRoute=L.Routing.control({
-waypoints:[
-L.latLng(lat,lng),
-L.latLng(quirinoTerminal[0],quirinoTerminal[1])
-],
-routeWhileDragging:false,
-addWaypoints:false,
-draggableWaypoints:false,
-show:false,
-lineOptions:{
-styles:[{color:'blue',weight:5}]
+setInterval(() => {
+    if (subscription && subscription.state !== 'joined') {
+        document.getElementById('reconnectBanner').style.display = 'block';
+        supabase.removeChannel(subscription);
+        setupRealtime();
+    }
+}, 10000);
+
+function showRoute(lat, lng) {
+    if (activeRoute) map.removeControl(activeRoute);
+    activeRoute = L.Routing.control({
+        waypoints: [L.latLng(lat, lng), L.latLng(quirinoTerminal[0], quirinoTerminal[1])],
+        routeWhileDragging: false, addWaypoints: false, draggableWaypoints: false, show: false,
+        lineOptions: { styles: [{ color: '#667eea', weight: 5, opacity: 0.8 }] }
+    }).addTo(map);
 }
-}).addTo(map);
-
-}
-
 </script>
 </body>
 </html>
