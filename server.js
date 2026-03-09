@@ -1,24 +1,12 @@
 require('dotenv').config();
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
 
 // =============================================
 // CONFIGURATION
 // =============================================
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-const PORT = process.env.PORT || 3000;
 
 // Supabase Client (anon key for general queries)
 const supabase = createClient(
@@ -32,9 +20,12 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// No-op emitter for Vercel (Socket.IO only works locally)
+let io = { emit: () => {} };
+
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static(__dirname));
 
 // =============================================
@@ -65,7 +56,6 @@ app.post('/api/register', async (req, res) => {
     }
 
     // Create user via admin API (no email confirmation, no rate limit)
-    // Store ALL user data in user_metadata (works regardless of DB schema)
     const metadata = { full_name: fullName, username, role, email };
     if (role === 'driver' && plateNumber) {
       metadata.plate_number = plateNumber;
@@ -82,7 +72,6 @@ app.post('/api/register', async (req, res) => {
 
     // If driver, register jeepney in database
     if (role === 'driver' && plateNumber) {
-      // Generate a bigint ID (timestamp-based)
       const jeepId = Date.now();
       const { error: jeepError } = await supabaseAdmin
         .from('jeepneys')
@@ -99,7 +88,6 @@ app.post('/api/register', async (req, res) => {
       if (jeepError) {
         console.error('Jeepney registration error:', jeepError);
       } else {
-        // Store jeepney ID in user metadata for easy lookup
         await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
           user_metadata: { ...metadata, jeepney_id: jeepId }
         });
@@ -204,7 +192,7 @@ app.get('/api/jeepneys', async (req, res) => {
 // Get jeepney by plate number
 app.get('/api/jeepneys/:plate', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('jeepneys')
       .select('*')
       .eq('plate_number', req.params.plate)
@@ -221,15 +209,14 @@ app.get('/api/jeepneys/:plate', async (req, res) => {
 // Get all live locations
 app.get('/api/locations', async (req, res) => {
   try {
-    // Get the latest location for each jeepney
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('jeepney_locations')
       .select('*')
       .order('timestamp', { ascending: false });
 
     if (error) throw error;
 
-    // Group by jeepney_id and get the latest
+    // Group by plate_number and get the latest
     const latestLocations = {};
     data.forEach(location => {
       if (!latestLocations[location.plate_number]) {
@@ -252,7 +239,6 @@ app.post('/api/locations', async (req, res) => {
   try {
     const { jeepney_id, plate_number, latitude, longitude, status } = req.body;
 
-    // Validate required fields
     if (!plate_number || !latitude || !longitude || !status) {
       return res.status(400).json({
         success: false,
@@ -260,7 +246,6 @@ app.post('/api/locations', async (req, res) => {
       });
     }
 
-    // Insert location (jeepney_id is optional)
     const locationData = { plate_number, latitude, longitude, status, timestamp: new Date().toISOString() };
     if (jeepney_id) locationData.jeepney_id = jeepney_id;
 
@@ -271,12 +256,9 @@ app.post('/api/locations', async (req, res) => {
 
     if (error) throw error;
 
-    // Emit to all connected clients via Socket.IO
+    // Emit to connected clients (local only, no-op on Vercel)
     io.emit('location-update', {
-      plate_number,
-      latitude,
-      longitude,
-      status,
+      plate_number, latitude, longitude, status,
       timestamp: new Date().toISOString()
     });
 
@@ -308,10 +290,8 @@ app.patch('/api/jeepneys/:plate/status', async (req, res) => {
 
     if (error) throw error;
 
-    // Emit status change
     io.emit('status-update', {
-      plate_number: plate,
-      status,
+      plate_number: plate, status,
       timestamp: new Date().toISOString()
     });
 
@@ -327,7 +307,7 @@ app.post('/api/jeepneys', async (req, res) => {
   try {
     const { driver_id, plate_number, seating_capacity, jeepney_type } = req.body;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('jeepneys')
       .insert([{
         driver_id,
@@ -349,7 +329,7 @@ app.post('/api/jeepneys', async (req, res) => {
 // Get user profile
 app.get('/api/profile/:userId', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', req.params.userId)
@@ -366,7 +346,7 @@ app.get('/api/profile/:userId', async (req, res) => {
 // Get routes
 app.get('/api/routes', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('routes')
       .select('*');
 
@@ -379,117 +359,90 @@ app.get('/api/routes', async (req, res) => {
 });
 
 // =============================================
-// SOCKET.IO REAL-TIME EVENTS
+// LOCAL DEV: Socket.IO + HTTP Server
 // =============================================
-let connectedDrivers = {};
-
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-
-  // Driver connects and identifies
-  socket.on('driver-connect', (data) => {
-    connectedDrivers[socket.id] = {
-      plate: data.plate,
-      driverId: data.driverId,
-      timestamp: new Date().toISOString()
-    };
-    console.log('Driver connected:', data.plate);
+if (!process.env.VERCEL) {
+  const http = require('http');
+  const { Server } = require('socket.io');
+  const server = http.createServer(app);
+  io = new Server(server, {
+    cors: { origin: '*', methods: ['GET', 'POST'] }
   });
 
-  // Live location update from driver
-  socket.on('location-update', async (data) => {
-    try {
-      const { plate_number, latitude, longitude, status, jeepney_id } = data;
+  let connectedDrivers = {};
 
-      // Save to database
-      const locData = { plate_number, latitude, longitude, status, timestamp: new Date().toISOString() };
-      if (jeepney_id) locData.jeepney_id = jeepney_id;
-      await supabaseAdmin.from('jeepney_locations').insert([locData]);
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
 
-      // Broadcast to all clients
-      io.emit('jeepney-location', {
-        plate_number,
-        latitude,
-        longitude,
-        status,
+    socket.on('driver-connect', (data) => {
+      connectedDrivers[socket.id] = {
+        plate: data.plate,
+        driverId: data.driverId,
         timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Error handling location update:', error);
-    }
+      };
+      console.log('Driver connected:', data.plate);
+    });
+
+    socket.on('location-update', async (data) => {
+      try {
+        const { plate_number, latitude, longitude, status, jeepney_id } = data;
+        const locData = { plate_number, latitude, longitude, status, timestamp: new Date().toISOString() };
+        if (jeepney_id) locData.jeepney_id = jeepney_id;
+        await supabaseAdmin.from('jeepney_locations').insert([locData]);
+        io.emit('jeepney-location', { plate_number, latitude, longitude, status, timestamp: new Date().toISOString() });
+      } catch (error) {
+        console.error('Error handling location update:', error);
+      }
+    });
+
+    socket.on('status-update', async (data) => {
+      try {
+        const { plate_number, status } = data;
+        await supabaseAdmin.from('jeepneys').update({ status }).eq('plate_number', plate_number);
+        io.emit('jeepney-status', { plate_number, status, timestamp: new Date().toISOString() });
+      } catch (error) {
+        console.error('Error handling status update:', error);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+      if (connectedDrivers[socket.id]) {
+        console.log('Driver disconnected:', connectedDrivers[socket.id].plate);
+        delete connectedDrivers[socket.id];
+      }
+    });
   });
 
-  // Status update (Available, On Route, Offline)
-  socket.on('status-update', async (data) => {
-    try {
-      const { plate_number, status } = data;
+  // Supabase realtime → Socket.IO bridge
+  supabase
+    .channel('jeepney_locations_changes')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jeepney_locations' },
+      (payload) => {
+        console.log('New location from Supabase:', payload.new);
+        io.emit('jeepney-location', payload.new);
+      }
+    )
+    .subscribe();
 
-      // Update in database
-      await supabaseAdmin.from('jeepneys').update({ status }).eq('plate_number', plate_number);
-
-      // Broadcast to all clients
-      io.emit('jeepney-status', {
-        plate_number,
-        status,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Error handling status update:', error);
-    }
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log('===========================================');
+    console.log(`BAG-Q Server running on http://localhost:${PORT}`);
+    console.log('===========================================');
+    console.log('API Endpoints:');
+    console.log('  GET  /api/health');
+    console.log('  GET  /api/jeepneys');
+    console.log('  GET  /api/jeepneys/:plate');
+    console.log('  POST /api/jeepneys');
+    console.log('  GET  /api/locations');
+    console.log('  POST /api/locations');
+    console.log('  PATCH /api/jeepneys/:plate/status');
+    console.log('  GET  /api/profile/:userId');
+    console.log('  GET  /api/routes');
+    console.log('===========================================');
   });
+}
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    if (connectedDrivers[socket.id]) {
-      const driver = connectedDrivers[socket.id];
-      console.log('Driver disconnected:', driver.plate);
-      delete connectedDrivers[socket.id];
-    }
-  });
-});
-
-// =============================================
-// SUPABASE REALTIME SUBSCRIPTION
-// =============================================
-// Subscribe to location changes
-const locationChannel = supabase
-  .channel('jeepney_locations_changes')
-  .on(
-    'postgres_changes',
-    {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'jeepney_locations'
-    },
-    (payload) => {
-      console.log('New location from Supabase:', payload.new);
-      // Broadcast to all Socket.IO clients
-      io.emit('jeepney-location', payload.new);
-    }
-  )
-  .subscribe();
-
-// =============================================
-// START SERVER
-// =============================================
-server.listen(PORT, () => {
-  console.log('===========================================');
-  console.log(`BAG-Q Server running on http://localhost:${PORT}`);
-  console.log('===========================================');
-  console.log('API Endpoints:');
-  console.log(`  GET  /api/health`);
-  console.log(`  GET  /api/jeepneys`);
-  console.log(`  GET  /api/jeepneys/:plate`);
-  console.log(`  POST /api/jeepneys`);
-  console.log(`  GET  /api/locations`);
-  console.log(`  POST /api/locations`);
-  console.log(`  PATCH /api/jeepneys/:plate/status`);
-  console.log(`  GET  /api/profile/:userId`);
-  console.log(`  GET  /api/routes`);
-  console.log('===========================================');
-  console.log('Socket.IO Events:');
-  console.log('  - driver-connect');
-  console.log('  - location-update');
-  console.log('  - status-update');
-  console.log('===========================================');
-});
+// Export for Vercel serverless
+module.exports = app;
