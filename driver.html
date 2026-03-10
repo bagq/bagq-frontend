@@ -30,7 +30,7 @@
 
         #driverPanel {
             position: fixed; top: 50%; left: 20px; transform: translateY(-50%);
-            width: 280px; background: #fff; padding: 24px 20px; border-radius: 16px;
+            width: 300px; background: #fff; padding: 24px 20px; border-radius: 16px;
             box-shadow: 0 8px 30px rgba(0,0,0,0.12); z-index: 1500;
         }
         #driverPanel .panel-title {
@@ -49,6 +49,12 @@
         .status-badge.available { background: #28a745; }
         .status-badge.on-route { background: #ffc107; color: #333; }
         .status-badge.offline { background: #dc3545; }
+
+        .dest-badge {
+            display: inline-block; padding: 5px 12px; border-radius: 10px;
+            font-size: 0.82rem; font-weight: 600; color: #fff; background: #667eea;
+        }
+        .dest-badge i { margin-right: 4px; }
 
         .gps-indicator {
             display: flex; align-items: center; gap: 6px; font-size: 0.8rem;
@@ -135,20 +141,25 @@
 
     <div class="info-row">
         <span class="label"><i class="fas fa-route"></i> Route</span>
-        <span style="font-weight:600;color:#2c3e50">Irisan Route</span>
+        <span style="font-weight:600;color:#2c3e50">Town ↔ Cypress</span>
     </div>
 
     <div class="mb-2">
-        <label class="form-label" style="font-weight:600;font-size:0.85rem;color:#444;margin-bottom:4px"><i class="fas fa-map-marker-alt" style="color:#667eea;margin-right:4px"></i> Destination</label>
+        <label class="form-label" style="font-weight:600;font-size:0.85rem;color:#444;margin-bottom:4px"><i class="fas fa-map-marker-alt" style="color:#667eea;margin-right:4px"></i> Heading to</label>
         <select id="destinationSelect" class="form-select" style="min-height:40px;border-radius:10px;border:1.5px solid #e0e0e0;font-size:0.85rem">
-            <option value="terminal1">Terminal 1 - Irisan</option>
-            <option value="terminal2">Terminal 2 - Quirino Hwy</option>
+            <option value="cypress">Cypress Terminal</option>
+            <option value="town">Town Terminal</option>
         </select>
     </div>
 
     <div class="info-row">
         <span class="label"><i class="fas fa-signal"></i> Status</span>
         <span id="statusText" class="status-badge available">Available</span>
+    </div>
+
+    <div class="info-row">
+        <span class="label"><i class="fas fa-location-arrow"></i> Heading</span>
+        <span id="destBadge" class="dest-badge"><i class="fas fa-arrow-right"></i> Cypress</span>
     </div>
 
     <div class="d-grid gap-2 mt-3">
@@ -171,6 +182,11 @@
 
 <script type="module">
 const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
+
+// Terminal coordinates
+const TOWN = [16.4161384, 120.5573176];
+const CYPRESS = [16.429639, 120.549139];
+const ARRIVAL_RADIUS_KM = 0.3; // 300 meters
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -202,7 +218,16 @@ function togglePanel() {
 }
 window.togglePanel = togglePanel;
 
-// --- Server API helpers (bypass RLS) ---
+// --- Distance calculation ---
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// --- Server API helpers ---
 async function apiUpdateStatus(plateNumber, status) {
     try {
         const res = await fetch(API_URL + '/api/jeepneys/' + encodeURIComponent(plateNumber) + '/status', {
@@ -217,9 +242,9 @@ async function apiUpdateStatus(plateNumber, status) {
     }
 }
 
-async function apiUpdateLocation(jeepneyId, plateNumber, latitude, longitude, status) {
+async function apiUpdateLocation(jeepneyId, plateNumber, latitude, longitude, status, destination) {
     try {
-        const body = { plate_number: plateNumber, latitude, longitude, status };
+        const body = { plate_number: plateNumber, latitude, longitude, status, destination };
         if (jeepneyId) body.jeepney_id = jeepneyId;
         const res = await fetch(API_URL + '/api/locations', {
             method: 'POST',
@@ -256,24 +281,39 @@ Promise.all([
 });
 
 // Map setup
-const map = L.map("map", { zoomControl: true }).setView([16.415, 120.575], 14);
+const map = L.map("map", { zoomControl: true }).setView([16.422, 120.553], 14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-const terminal1 = [16.4161384, 120.5573176];   // Irisan Terminal
-const terminal2 = [16.429590, 120.549141];     // Quirino Hwy Terminal
-
 let driverMarker;
 let activeRouteControl = null;
 
-function getSelectedDestination() {
-    const sel = document.getElementById('destinationSelect');
-    return sel.value === 'terminal2' ? terminal2 : terminal1;
+// Current destination: 'cypress' or 'town'
+let currentDestination = 'cypress';
+
+function getDestCoords() {
+    return currentDestination === 'cypress' ? CYPRESS : TOWN;
 }
 
+function getDestName() {
+    return currentDestination === 'cypress' ? 'Cypress' : 'Town';
+}
+
+function updateDestUI() {
+    const badge = document.getElementById('destBadge');
+    const sel = document.getElementById('destinationSelect');
+    sel.value = currentDestination;
+    badge.innerHTML = '<i class="fas fa-arrow-right"></i> ' + getDestName();
+}
+
+// Sync dropdown changes to destination
+document.getElementById('destinationSelect').addEventListener('change', (e) => {
+    currentDestination = e.target.value;
+    updateDestUI();
+});
+
 function initMap() {
-    // Terminal markers
     function addTerminal(coords, label) {
         if (terminalIconResolved) {
             L.marker(coords, { icon: terminalIconResolved }).addTo(map).bindPopup("<b>" + label + "</b>");
@@ -281,20 +321,19 @@ function initMap() {
             L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
         }
     }
-    addTerminal(terminal1, "Terminal 1 - Irisan");
-    addTerminal(terminal2, "Terminal 2 - Quirino Hwy");
+    addTerminal(TOWN, "Town Terminal");
+    addTerminal(CYPRESS, "Cypress Terminal");
 
-    // Driver marker
     if (jeepIconResolved) {
-        driverMarker = L.marker(terminal1, { icon: jeepIconResolved }).addTo(map);
+        driverMarker = L.marker(TOWN, { icon: jeepIconResolved }).addTo(map);
     } else {
-        driverMarker = L.circleMarker(terminal1, { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+        driverMarker = L.circleMarker(TOWN, { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
     }
 }
 
 function showRouteToDestination(fromLat, fromLng) {
     if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
-    const dest = getSelectedDestination();
+    const dest = getDestCoords();
     activeRouteControl = L.Routing.control({
         waypoints: [L.latLng(fromLat, fromLng), L.latLng(dest[0], dest[1])],
         routeWhileDragging: false, show: false, addWaypoints: false, draggableWaypoints: false,
@@ -302,9 +341,35 @@ function showRouteToDestination(fromLat, fromLng) {
     }).addTo(map);
 }
 
+// --- Auto-switch destination on arrival ---
+let hasArrivedFlag = false;
+
+function checkArrival(lat, lng) {
+    const dest = getDestCoords();
+    const dist = getDistance(lat, lng, dest[0], dest[1]);
+
+    if (dist <= ARRIVAL_RADIUS_KM && !hasArrivedFlag) {
+        hasArrivedFlag = true;
+        // Arrived at destination — switch to opposite terminal
+        const arrivedAt = getDestName();
+        currentDestination = currentDestination === 'cypress' ? 'town' : 'cypress';
+        updateDestUI();
+        showToast('Arrived at ' + arrivedAt + '! Now heading to ' + getDestName(), 'info');
+
+        // Redraw route to new destination
+        showRouteToDestination(lat, lng);
+    }
+
+    // Reset flag when driver moves away from terminal
+    if (dist > ARRIVAL_RADIUS_KM) {
+        hasArrivedFlag = false;
+    }
+}
+
+// --- Trip state ---
 let watchId = null;
 let sendInterval = null;
-let lastSentLat = null, lastSentLng = null;
+let lastLat = null, lastLng = null;
 let currentStatus = "Available";
 
 function updateStatusUI() {
@@ -327,15 +392,14 @@ function updateGPS(active) {
     document.getElementById('gpsText').textContent = 'GPS: ' + (active ? 'Tracking' : 'Inactive');
 }
 
-// Initialize button states on load
 updateStatusUI();
+updateDestUI();
 
 async function startTrip() {
     if (!loggedDriver || currentStatus === "On Route") return;
     const btn = document.getElementById('startBtn');
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
 
-    // Lock destination during trip
     document.getElementById('destinationSelect').disabled = true;
 
     currentStatus = "On Route";
@@ -351,9 +415,7 @@ async function startTrip() {
         return;
     }
 
-    const dest = getSelectedDestination();
-    const destName = dest === terminal2 ? 'Terminal 2 - Quirino Hwy' : 'Terminal 1 - Irisan';
-    showToast('Trip started to ' + destName + '! GPS tracking active.', 'success');
+    showToast('Trip started! Heading to ' + getDestName() + '. GPS tracking active.', 'success');
     btn.innerHTML = '<i class="fas fa-play"></i> Start Trip';
 
     if (!navigator.geolocation) {
@@ -364,13 +426,14 @@ async function startTrip() {
 
     updateGPS(true);
 
-    // Use watchPosition for continuous, accurate GPS tracking
     watchId = navigator.geolocation.watchPosition(
         (pos) => {
             const lat = pos.coords.latitude, lng = pos.coords.longitude;
             driverMarker.setLatLng([lat, lng]);
-            lastSentLat = lat;
-            lastSentLng = lng;
+            lastLat = lat;
+            lastLng = lng;
+            // Check if arrived at destination
+            checkArrival(lat, lng);
         },
         (err) => {
             console.error("GPS error:", err);
@@ -380,24 +443,22 @@ async function startTrip() {
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
     );
 
-    // Send initial position
     navigator.geolocation.getCurrentPosition(
         async (pos) => {
             const lat = pos.coords.latitude, lng = pos.coords.longitude;
             driverMarker.setLatLng([lat, lng]);
             map.setView([lat, lng], 15);
             showRouteToDestination(lat, lng);
-            lastSentLat = lat; lastSentLng = lng;
-            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
+            lastLat = lat; lastLng = lng;
+            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route", currentDestination);
         },
         () => {},
         { enableHighAccuracy: true }
     );
 
-    // Send location to server every 2 seconds
     sendInterval = setInterval(async () => {
-        if (lastSentLat !== null && lastSentLng !== null && currentStatus === "On Route") {
-            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lastSentLat, lastSentLng, "On Route");
+        if (lastLat !== null && lastLng !== null && currentStatus === "On Route") {
+            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lastLat, lastLng, "On Route", currentDestination);
         }
     }, 2000);
 }
@@ -415,14 +476,13 @@ async function endTrip() {
         showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
     }
 
-    // Stop GPS tracking
     if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
     if (sendInterval) { clearInterval(sendInterval); sendInterval = null; }
     if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
     updateGPS(false);
-    lastSentLat = null; lastSentLng = null;
+    lastLat = null; lastLng = null;
+    hasArrivedFlag = false;
 
-    // Unlock destination selector
     document.getElementById('destinationSelect').disabled = false;
 
     btn.innerHTML = '<i class="fas fa-stop"></i> End Trip';

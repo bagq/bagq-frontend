@@ -23,6 +23,9 @@ const supabaseAdmin = createClient(
 // No-op emitter for Vercel (Socket.IO only works locally)
 let io = { emit: () => {} };
 
+// In-memory destination tracking (no DB schema change needed)
+const jeepneyDestinations = {};
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -248,10 +251,11 @@ app.get('/api/locations', async (req, res) => {
 
     if (error) throw error;
 
-    // Group by plate_number, get the latest for each
+    // Group by plate_number, get the latest for each, enrich with destination
     const latestLocations = {};
     data.forEach(location => {
       if (!latestLocations[location.plate_number]) {
+        location.destination = jeepneyDestinations[location.plate_number] || null;
         latestLocations[location.plate_number] = location;
       }
     });
@@ -269,13 +273,18 @@ app.get('/api/locations', async (req, res) => {
 // Update jeepney location
 app.post('/api/locations', async (req, res) => {
   try {
-    const { jeepney_id, plate_number, latitude, longitude, status } = req.body;
+    const { jeepney_id, plate_number, latitude, longitude, status, destination } = req.body;
 
     if (!plate_number || !latitude || !longitude || !status) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
       });
+    }
+
+    // Store destination in memory
+    if (destination) {
+      jeepneyDestinations[plate_number] = destination;
     }
 
     const locationData = { plate_number, latitude, longitude, status, timestamp: new Date().toISOString() };
@@ -290,7 +299,7 @@ app.post('/api/locations', async (req, res) => {
 
     // Emit to connected clients (local only, no-op on Vercel)
     io.emit('location-update', {
-      plate_number, latitude, longitude, status,
+      plate_number, latitude, longitude, status, destination: destination || jeepneyDestinations[plate_number] || null,
       timestamp: new Date().toISOString()
     });
 
@@ -321,6 +330,11 @@ app.patch('/api/jeepneys/:plate/status', async (req, res) => {
       .select();
 
     if (error) throw error;
+
+    // Clear destination when trip ends
+    if (status !== 'On Route') {
+      delete jeepneyDestinations[plate];
+    }
 
     io.emit('status-update', {
       plate_number: plate, status,

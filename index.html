@@ -74,13 +74,15 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
     @keyframes pulseMobile { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
 }
 
-.leaflet-popup-content { font-size: 0.9rem; line-height: 1.6; min-width: 160px; }
+.leaflet-popup-content { font-size: 0.9rem; line-height: 1.6; min-width: 180px; }
 .popup-plate { font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; color: #2c3e50; }
 .popup-status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; color: #fff; }
 .popup-status.on-route { background: #28a745; }
 .popup-status.available { background: #ffc107; color: #333; }
-.popup-eta { margin-top: 6px; font-size: 0.85rem; color: #555; }
+.popup-eta { margin-top: 4px; font-size: 0.85rem; color: #555; }
 .popup-eta i { color: #667eea; }
+.popup-direction { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: #eef2ff; color: #667eea; font-weight: 600; font-size: 0.82rem; display: inline-block; }
+.popup-direction i { margin-right: 4px; }
 </style>
 </head>
 
@@ -102,6 +104,10 @@ import { supabase, subscribeToLocations } from './supabase-client.js';
 
 const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
+// Terminal coordinates
+const TOWN = [16.4161384, 120.5573176];
+const CYPRESS = [16.429639, 120.549139];
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
@@ -112,7 +118,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
 }
 
-// Auth-aware header (uses localStorage, not broken profiles table)
+// Auth-aware header
 function setupNav() {
     const nav = document.getElementById('navLinks');
     const stored = localStorage.getItem("currentUser");
@@ -135,15 +141,12 @@ function setupNav() {
 }
 setupNav();
 
-const terminal1 = [16.4161384, 120.5573176];   // Terminal 1 - Irisan
-const terminal2 = [16.429590, 120.549141];     // Terminal 2 - Quirino Hwy
-
-const map = L.map("map").setView(terminal1, 14);
+const map = L.map("map").setView([16.422, 120.553], 14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-// Icon fallbacks
+// Icon preload
 let jeepIconResolved = null;
 let terminalIconResolved = null;
 (function preloadIcons() {
@@ -166,8 +169,8 @@ function addTerminalMarkers() {
             L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
         }
     }
-    addTerminal(terminal1, "Terminal 1 - Irisan");
-    addTerminal(terminal2, "Terminal 2 - Quirino Hwy");
+    addTerminal(TOWN, "Town Terminal");
+    addTerminal(CYPRESS, "Cypress Terminal");
 }
 
 function makeJeepMarker(lat, lng) {
@@ -197,21 +200,56 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function buildPopup(plate, status, lat, lng) {
-    const dist1 = getDistance(lat, lng, terminal1[0], terminal1[1]);
-    const dist2 = getDistance(lat, lng, terminal2[0], terminal2[1]);
-    const eta1 = Math.round((dist1 / 25) * 60);
-    const eta2 = Math.round((dist2 / 25) * 60);
+function buildPopup(plate, status, lat, lng, destination) {
+    const distTown = getDistance(lat, lng, TOWN[0], TOWN[1]);
+    const distCypress = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
+    const etaTown = Math.max(1, Math.round((distTown / 25) * 60));
+    const etaCypress = Math.max(1, Math.round((distCypress / 25) * 60));
     const statusClass = status === 'On Route' ? 'on-route' : 'available';
+
+    let directionHtml = '';
+    if (destination === 'cypress') {
+        directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-right"></i> On the way to Cypress</div>';
+    } else if (destination === 'town') {
+        directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-left"></i> On the way to Town</div>';
+    }
+
     return '<div class="popup-plate"><i class="fas fa-bus" style="color:#667eea"></i> ' + plate + '</div>' +
         '<span class="popup-status ' + statusClass + '">' + status + '</span>' +
-        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + eta1 + ' min to Irisan</div>' +
-        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + eta2 + ' min to Quirino Hwy</div>' +
+        directionHtml +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaTown + ' min to Town</div>' +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaCypress + ' min to Cypress</div>' +
         '<small style="color:#aaa"><i class="fas fa-route"></i> Tap for route</small>';
+}
+
+// --- Smooth marker movement ---
+function smoothMove(marker, newLat, newLng, duration) {
+    const oldLatLng = marker.getLatLng();
+    const startLat = oldLatLng.lat, startLng = oldLatLng.lng;
+    const dLat = newLat - startLat, dLng = newLng - startLng;
+
+    // Skip animation if distance too small or too large
+    const dist = Math.abs(dLat) + Math.abs(dLng);
+    if (dist < 0.000001 || dist > 0.1) {
+        marker.setLatLng([newLat, newLng]);
+        return;
+    }
+
+    const start = performance.now();
+    function animate(now) {
+        const elapsed = now - start;
+        const t = Math.min(elapsed / duration, 1);
+        const lat = startLat + dLat * t;
+        const lng = startLng + dLng * t;
+        marker.setLatLng([lat, lng]);
+        if (t < 1) requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
 }
 
 let jeepMarkers = {};
 let jeepLastSeen = {};
+let jeepDestinations = {}; // Track destinations for each plate
 let activeRoute = null;
 
 async function loadLiveJeepneys() {
@@ -225,22 +263,24 @@ async function loadLiveJeepneys() {
         const activePlates = new Set();
 
         locations.forEach(loc => {
-            if (loc.status === "On Route") {
-                jeepCount++;
-                activePlates.add(loc.plate_number);
-                jeepLastSeen[loc.plate_number] = Date.now();
+            jeepCount++;
+            activePlates.add(loc.plate_number);
+            jeepLastSeen[loc.plate_number] = Date.now();
+            if (loc.destination) jeepDestinations[loc.plate_number] = loc.destination;
 
-                if (!jeepMarkers[loc.plate_number]) {
-                    jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude).addTo(map);
-                    jeepMarkers[loc.plate_number].on("click", () => {
-                        const pos = jeepMarkers[loc.plate_number].getLatLng();
-                        showRoute(pos.lat, pos.lng);
-                    });
-                } else {
-                    jeepMarkers[loc.plate_number].setLatLng([loc.latitude, loc.longitude]);
-                }
-                jeepMarkers[loc.plate_number].bindPopup(buildPopup(loc.plate_number, loc.status, loc.latitude, loc.longitude));
+            if (!jeepMarkers[loc.plate_number]) {
+                jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude).addTo(map);
+                jeepMarkers[loc.plate_number].on("click", () => {
+                    const pos = jeepMarkers[loc.plate_number].getLatLng();
+                    showRoute(pos.lat, pos.lng, loc.plate_number);
+                });
+            } else {
+                // Smooth animation over 1.5 seconds
+                smoothMove(jeepMarkers[loc.plate_number], loc.latitude, loc.longitude, 1500);
             }
+            jeepMarkers[loc.plate_number].bindPopup(
+                buildPopup(loc.plate_number, loc.status, loc.latitude, loc.longitude, jeepDestinations[loc.plate_number])
+            );
         });
 
         Object.keys(jeepMarkers).forEach(plate => {
@@ -248,6 +288,7 @@ async function loadLiveJeepneys() {
                 map.removeLayer(jeepMarkers[plate]);
                 delete jeepMarkers[plate];
                 delete jeepLastSeen[plate];
+                delete jeepDestinations[plate];
             }
         });
 
@@ -270,7 +311,6 @@ let locationSub = null;
 let statusSub = null;
 
 function setupRealtime() {
-    // Subscribe to new location inserts — moves markers in real-time
     locationSub = subscribeToLocations((newLoc) => {
         document.getElementById('reconnectBanner').style.display = 'none';
         if (newLoc.status === "On Route") {
@@ -279,14 +319,15 @@ function setupRealtime() {
                 jeepMarkers[newLoc.plate_number] = makeJeepMarker(newLoc.latitude, newLoc.longitude).addTo(map);
                 jeepMarkers[newLoc.plate_number].on("click", () => {
                     const pos = jeepMarkers[newLoc.plate_number].getLatLng();
-                    showRoute(pos.lat, pos.lng);
+                    showRoute(pos.lat, pos.lng, newLoc.plate_number);
                 });
             } else {
-                jeepMarkers[newLoc.plate_number].setLatLng([newLoc.latitude, newLoc.longitude]);
+                smoothMove(jeepMarkers[newLoc.plate_number], newLoc.latitude, newLoc.longitude, 1500);
             }
-            jeepMarkers[newLoc.plate_number].bindPopup(buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude));
+            jeepMarkers[newLoc.plate_number].bindPopup(
+                buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude, jeepDestinations[newLoc.plate_number])
+            );
 
-            // Update counter
             const countEl = document.getElementById('jeepCount');
             const currentCount = Object.keys(jeepMarkers).length;
             if (parseInt(countEl.textContent) !== currentCount) {
@@ -297,7 +338,6 @@ function setupRealtime() {
         }
     });
 
-    // Subscribe to jeepney status changes — instantly remove markers when trips end
     statusSub = supabase
         .channel('jeepneys_status_changes')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jeepneys' }, (payload) => {
@@ -306,8 +346,8 @@ function setupRealtime() {
                 map.removeLayer(jeepMarkers[jeep.plate_number]);
                 delete jeepMarkers[jeep.plate_number];
                 delete jeepLastSeen[jeep.plate_number];
-                const countEl = document.getElementById('jeepCount');
-                countEl.textContent = Object.keys(jeepMarkers).length;
+                delete jeepDestinations[jeep.plate_number];
+                document.getElementById('jeepCount').textContent = Object.keys(jeepMarkers).length;
             }
         })
         .subscribe();
@@ -323,14 +363,19 @@ setInterval(() => {
     }
 }, 10000);
 
-function showRoute(lat, lng) {
+function showRoute(lat, lng, plate) {
     if (activeRoute) map.removeControl(activeRoute);
-    // Show route to nearest terminal
-    const dist1 = getDistance(lat, lng, terminal1[0], terminal1[1]);
-    const dist2 = getDistance(lat, lng, terminal2[0], terminal2[1]);
-    const nearest = dist1 < dist2 ? terminal1 : terminal2;
+    // Use jeepney's destination if known, otherwise nearest terminal
+    let dest;
+    if (plate && jeepDestinations[plate]) {
+        dest = jeepDestinations[plate] === 'cypress' ? CYPRESS : TOWN;
+    } else {
+        const dist1 = getDistance(lat, lng, TOWN[0], TOWN[1]);
+        const dist2 = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
+        dest = dist1 < dist2 ? TOWN : CYPRESS;
+    }
     activeRoute = L.Routing.control({
-        waypoints: [L.latLng(lat, lng), L.latLng(nearest[0], nearest[1])],
+        waypoints: [L.latLng(lat, lng), L.latLng(dest[0], dest[1])],
         routeWhileDragging: false, addWaypoints: false, draggableWaypoints: false, show: false,
         lineOptions: { styles: [{ color: '#667eea', weight: 5, opacity: 0.8 }] }
     }).addTo(map);
