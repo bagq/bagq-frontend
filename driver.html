@@ -100,11 +100,11 @@
             #driverPanel {
                 position: fixed; bottom: 0; left: 0; right: 0;
                 width: 100%; top: auto; transform: none;
-                border-radius: 20px 20px 0 0; max-height: 64px;
-                overflow: hidden; transition: max-height 0.3s ease;
+                border-radius: 20px 20px 0 0; max-height: 75vh;
+                overflow-y: auto; transition: max-height 0.3s ease;
                 padding: 16px 20px;
             }
-            #driverPanel.panel-expanded { max-height: 75vh; overflow-y: auto; }
+            #driverPanel.panel-collapsed { max-height: 64px; overflow: hidden; }
             #driverPanel .panel-handle {
                 width: 40px; height: 4px; background: #ddd; border-radius: 2px;
                 margin: 0 auto 12px; display: block;
@@ -198,7 +198,7 @@ function logout() {
 window.logout = logout;
 
 function togglePanel() {
-    document.getElementById('driverPanel').classList.toggle('panel-expanded');
+    document.getElementById('driverPanel').classList.toggle('panel-collapsed');
 }
 window.togglePanel = togglePanel;
 
@@ -402,10 +402,7 @@ async function endTrip() {
 window.startTrip = startTrip;
 window.endTrip = endTrip;
 
-if (window.innerWidth <= 768) {
-    setTimeout(() => document.getElementById('driverPanel').classList.add('panel-expanded'), 500);
-    setTimeout(() => document.getElementById('driverPanel').classList.remove('panel-expanded'), 3000);
-}
+// Panel starts expanded on mobile — user can collapse with toggle button
 </script>
 
 </body>
