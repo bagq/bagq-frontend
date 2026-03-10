@@ -319,6 +319,8 @@ document.getElementById("registerForm").addEventListener("submit", async e => {
         showToast('Account created successfully!', 'success');
         document.getElementById('registerForm').reset();
         document.getElementById('driverFields').style.display = 'none';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
 
     } catch (err) {
         showToast(err.message || 'Registration failed. Make sure the server is running.', 'error');

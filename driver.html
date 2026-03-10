@@ -302,14 +302,24 @@ function showRouteToDestination(fromLat, fromLng) {
     }).addTo(map);
 }
 
-let trackingInterval = null;
-let status = "Available";
+let watchId = null;
+let sendInterval = null;
+let lastSentLat = null, lastSentLng = null;
+let currentStatus = "Available";
 
 function updateStatusUI() {
     const el = document.getElementById("statusText");
-    if (status === "Available") { el.textContent = "Available"; el.className = "status-badge available"; }
-    else if (status === "On Route") { el.textContent = "On Route"; el.className = "status-badge on-route"; }
-    else { el.textContent = "Offline"; el.className = "status-badge offline"; }
+    const startBtn = document.getElementById('startBtn');
+    const endBtn = document.getElementById('endBtn');
+    if (currentStatus === "On Route") {
+        el.textContent = "On Route"; el.className = "status-badge on-route";
+        startBtn.disabled = true; startBtn.style.opacity = '0.5';
+        endBtn.disabled = false; endBtn.style.opacity = '1';
+    } else {
+        el.textContent = "Available"; el.className = "status-badge available";
+        startBtn.disabled = false; startBtn.style.opacity = '1';
+        endBtn.disabled = true; endBtn.style.opacity = '0.5';
+    }
 }
 
 function updateGPS(active) {
@@ -317,69 +327,87 @@ function updateGPS(active) {
     document.getElementById('gpsText').textContent = 'GPS: ' + (active ? 'Tracking' : 'Inactive');
 }
 
+// Initialize button states on load
+updateStatusUI();
+
 async function startTrip() {
-    if (!loggedDriver) return;
+    if (!loggedDriver || currentStatus === "On Route") return;
     const btn = document.getElementById('startBtn');
-    btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
 
     // Lock destination during trip
     document.getElementById('destinationSelect').disabled = true;
 
-    status = "On Route";
+    currentStatus = "On Route";
     updateStatusUI();
 
     const result = await apiUpdateStatus(loggedDriver.plate, "On Route");
     if (!result.success) {
         showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
+        currentStatus = "Available";
+        updateStatusUI();
+        document.getElementById('destinationSelect').disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Start Trip';
+        return;
     }
 
     const dest = getSelectedDestination();
     const destName = dest === terminal2 ? 'Terminal 2 - Quirino Hwy' : 'Terminal 1 - Irisan';
     showToast('Trip started to ' + destName + '! GPS tracking active.', 'success');
-
-    btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-play"></i> Start Trip';
 
-    if (navigator.geolocation) {
-        updateGPS(true);
-        // Send initial position immediately and show route
-        navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-                const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                driverMarker.setLatLng([lat, lng]);
-                map.setView([lat, lng], 15);
-                showRouteToDestination(lat, lng);
-                await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
-            },
-            (err) => { console.error("GPS error:", err); },
-            { enableHighAccuracy: true }
-        );
-        // Track every 2 seconds for smooth real-time movement
-        trackingInterval = setInterval(() => {
-            navigator.geolocation.getCurrentPosition(
-                async (pos) => {
-                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                    driverMarker.setLatLng([lat, lng]);
-                    await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
-                },
-                (err) => { console.error("GPS error:", err); updateGPS(false); },
-                { enableHighAccuracy: true }
-            );
-        }, 2000);
-    } else {
+    if (!navigator.geolocation) {
         showToast('GPS not available on this device', 'error');
         updateGPS(false);
+        return;
     }
+
+    updateGPS(true);
+
+    // Use watchPosition for continuous, accurate GPS tracking
+    watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude, lng = pos.coords.longitude;
+            driverMarker.setLatLng([lat, lng]);
+            lastSentLat = lat;
+            lastSentLng = lng;
+        },
+        (err) => {
+            console.error("GPS error:", err);
+            updateGPS(false);
+            showToast('GPS signal lost. Make sure location is enabled.', 'error');
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+    );
+
+    // Send initial position
+    navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+            const lat = pos.coords.latitude, lng = pos.coords.longitude;
+            driverMarker.setLatLng([lat, lng]);
+            map.setView([lat, lng], 15);
+            showRouteToDestination(lat, lng);
+            lastSentLat = lat; lastSentLng = lng;
+            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
+        },
+        () => {},
+        { enableHighAccuracy: true }
+    );
+
+    // Send location to server every 2 seconds
+    sendInterval = setInterval(async () => {
+        if (lastSentLat !== null && lastSentLng !== null && currentStatus === "On Route") {
+            await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lastSentLat, lastSentLng, "On Route");
+        }
+    }, 2000);
 }
 
 async function endTrip() {
-    if (!loggedDriver) return;
+    if (!loggedDriver || currentStatus !== "On Route") return;
     const btn = document.getElementById('endBtn');
-    btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ending...';
 
-    status = "Available";
+    currentStatus = "Available";
     updateStatusUI();
 
     const result = await apiUpdateStatus(loggedDriver.plate, "Available");
@@ -387,22 +415,22 @@ async function endTrip() {
         showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
     }
 
-    if (trackingInterval) { clearInterval(trackingInterval); trackingInterval = null; }
+    // Stop GPS tracking
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if (sendInterval) { clearInterval(sendInterval); sendInterval = null; }
     if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
     updateGPS(false);
+    lastSentLat = null; lastSentLng = null;
 
     // Unlock destination selector
     document.getElementById('destinationSelect').disabled = false;
 
-    btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-stop"></i> End Trip';
     showToast('Trip ended.', 'info');
 }
 
 window.startTrip = startTrip;
 window.endTrip = endTrip;
-
-// Panel starts expanded on mobile — user can collapse with toggle button
 </script>
 
 </body>

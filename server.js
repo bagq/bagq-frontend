@@ -238,17 +238,20 @@ app.get('/api/locations', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
+    const activePlatesArr = Array.from(activePlates);
+
     const { data, error } = await supabaseAdmin
       .from('jeepney_locations')
       .select('*')
+      .in('plate_number', activePlatesArr)
       .order('timestamp', { ascending: false });
 
     if (error) throw error;
 
-    // Group by plate_number, get the latest, but ONLY for active jeepneys
+    // Group by plate_number, get the latest for each
     const latestLocations = {};
     data.forEach(location => {
-      if (!latestLocations[location.plate_number] && activePlates.has(location.plate_number)) {
+      if (!latestLocations[location.plate_number]) {
         latestLocations[location.plate_number] = location;
       }
     });

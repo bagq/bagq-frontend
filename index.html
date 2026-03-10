@@ -232,7 +232,10 @@ async function loadLiveJeepneys() {
 
                 if (!jeepMarkers[loc.plate_number]) {
                     jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude).addTo(map);
-                    jeepMarkers[loc.plate_number].on("click", () => showRoute(loc.latitude, loc.longitude));
+                    jeepMarkers[loc.plate_number].on("click", () => {
+                        const pos = jeepMarkers[loc.plate_number].getLatLng();
+                        showRoute(pos.lat, pos.lng);
+                    });
                 } else {
                     jeepMarkers[loc.plate_number].setLatLng([loc.latitude, loc.longitude]);
                 }
@@ -263,28 +266,59 @@ async function loadLiveJeepneys() {
 setInterval(loadLiveJeepneys, 2000);
 loadLiveJeepneys();
 
-let subscription = null;
+let locationSub = null;
+let statusSub = null;
+
 function setupRealtime() {
-    subscription = subscribeToLocations((newLoc) => {
+    // Subscribe to new location inserts — moves markers in real-time
+    locationSub = subscribeToLocations((newLoc) => {
         document.getElementById('reconnectBanner').style.display = 'none';
         if (newLoc.status === "On Route") {
             jeepLastSeen[newLoc.plate_number] = Date.now();
             if (!jeepMarkers[newLoc.plate_number]) {
                 jeepMarkers[newLoc.plate_number] = makeJeepMarker(newLoc.latitude, newLoc.longitude).addTo(map);
-                jeepMarkers[newLoc.plate_number].on("click", () => showRoute(newLoc.latitude, newLoc.longitude));
+                jeepMarkers[newLoc.plate_number].on("click", () => {
+                    const pos = jeepMarkers[newLoc.plate_number].getLatLng();
+                    showRoute(pos.lat, pos.lng);
+                });
             } else {
                 jeepMarkers[newLoc.plate_number].setLatLng([newLoc.latitude, newLoc.longitude]);
             }
             jeepMarkers[newLoc.plate_number].bindPopup(buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude));
+
+            // Update counter
+            const countEl = document.getElementById('jeepCount');
+            const currentCount = Object.keys(jeepMarkers).length;
+            if (parseInt(countEl.textContent) !== currentCount) {
+                document.getElementById('jeepCounter').classList.add('pulse');
+                setTimeout(() => document.getElementById('jeepCounter').classList.remove('pulse'), 400);
+            }
+            countEl.textContent = currentCount;
         }
     });
+
+    // Subscribe to jeepney status changes — instantly remove markers when trips end
+    statusSub = supabase
+        .channel('jeepneys_status_changes')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jeepneys' }, (payload) => {
+            const jeep = payload.new;
+            if (jeep.status !== 'On Route' && jeepMarkers[jeep.plate_number]) {
+                map.removeLayer(jeepMarkers[jeep.plate_number]);
+                delete jeepMarkers[jeep.plate_number];
+                delete jeepLastSeen[jeep.plate_number];
+                const countEl = document.getElementById('jeepCount');
+                countEl.textContent = Object.keys(jeepMarkers).length;
+            }
+        })
+        .subscribe();
 }
 setupRealtime();
 
 setInterval(() => {
-    if (subscription && subscription.state !== 'joined') {
+    if (locationSub && locationSub.state !== 'joined') {
         document.getElementById('reconnectBanner').style.display = 'block';
-        supabase.removeChannel(subscription);
+        supabase.removeChannel(locationSub);
+        if (statusSub) supabase.removeChannel(statusSub);
         setupRealtime();
     }
 }, 10000);
