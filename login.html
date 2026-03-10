@@ -106,6 +106,22 @@ body {
     <div id="password-error" class="field-error"></div>
 </div>
 
+<div class="mb-3" id="plateField" style="display:none">
+    <label class="form-label" for="plateNumber"><i class="fas fa-hashtag"></i> Plate Number <span style="font-weight:400;color:#aaa">(for drivers)</span></label>
+    <input id="plateNumber" class="form-control" placeholder="e.g. ABC-1234">
+    <div id="plateNumber-error" class="field-error"></div>
+    <small style="color:#aaa;font-size:0.75rem">Leave blank to use your registered plate number.</small>
+</div>
+
+<div class="mb-3">
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="isDriverCheck" style="cursor:pointer">
+        <label class="form-check-label" for="isDriverCheck" style="font-size:0.85rem;color:#666;cursor:pointer">
+            <i class="fas fa-bus" style="color:#667eea"></i> I'm a driver (show plate number)
+        </label>
+    </div>
+</div>
+
 <button type="submit" id="loginBtn" class="btn btn-login w-100">
     <i class="fas fa-sign-in-alt"></i> Sign In
 </button>
@@ -162,6 +178,11 @@ document.getElementById('togglePassword').addEventListener('click', () => {
     else { pwd.type = 'password'; icon.className = 'fas fa-eye'; }
 });
 
+// Toggle plate number field
+document.getElementById('isDriverCheck').addEventListener('change', (e) => {
+    document.getElementById('plateField').style.display = e.target.checked ? 'block' : 'none';
+});
+
 // Login form — uses server-side /api/login (handles username lookup + auth)
 document.getElementById("loginForm").addEventListener("submit", async e => {
     e.preventDefault();
@@ -169,6 +190,7 @@ document.getElementById("loginForm").addEventListener("submit", async e => {
 
     const input = document.getElementById("loginInput").value.trim();
     const password = document.getElementById("password").value;
+    const plateNumber = document.getElementById("plateNumber").value.trim();
 
     if (!input) { showFieldError('loginInput', 'Please enter your email or username'); return; }
     if (!password) { showFieldError('password', 'Please enter your password'); return; }
@@ -178,10 +200,13 @@ document.getElementById("loginForm").addEventListener("submit", async e => {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Signing in...';
 
     try {
+        const body = { input, password };
+        if (plateNumber) body.plate_number = plateNumber;
+
         const response = await fetch(API_URL + '/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input, password })
+            body: JSON.stringify(body)
         });
 
         const result = await response.json();
