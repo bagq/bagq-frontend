@@ -135,8 +135,17 @@
 
     <div class="info-row">
         <span class="label"><i class="fas fa-route"></i> Route</span>
-        <span style="font-weight:600;color:#2c3e50">Irisan - Quirino</span>
+        <span style="font-weight:600;color:#2c3e50">Irisan Route</span>
     </div>
+
+    <div class="mb-2">
+        <label class="form-label" style="font-weight:600;font-size:0.85rem;color:#444;margin-bottom:4px"><i class="fas fa-map-marker-alt" style="color:#667eea;margin-right:4px"></i> Destination</label>
+        <select id="destinationSelect" class="form-select" style="min-height:40px;border-radius:10px;border:1.5px solid #e0e0e0;font-size:0.85rem">
+            <option value="terminal1">Terminal 1 - Irisan</option>
+            <option value="terminal2">Terminal 2 - Quirino Hwy</option>
+        </select>
+    </div>
+
     <div class="info-row">
         <span class="label"><i class="fas fa-signal"></i> Status</span>
         <span id="statusText" class="status-badge available">Available</span>
@@ -252,10 +261,16 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-const irisanTerminal1 = [16.4161384, 120.5573176];
-const irisanTerminal2 = [16.4130536, 120.5934281];
+const terminal1 = [16.4161384, 120.5573176];   // Irisan Terminal
+const terminal2 = [16.429590, 120.549141];     // Quirino Hwy Terminal
 
 let driverMarker;
+let activeRouteControl = null;
+
+function getSelectedDestination() {
+    const sel = document.getElementById('destinationSelect');
+    return sel.value === 'terminal2' ? terminal2 : terminal1;
+}
 
 function initMap() {
     // Terminal markers
@@ -266,19 +281,22 @@ function initMap() {
             L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
         }
     }
-    addTerminal(irisanTerminal1, "Irisan Terminal");
-    addTerminal(irisanTerminal2, "Quirino Terminal");
+    addTerminal(terminal1, "Terminal 1 - Irisan");
+    addTerminal(terminal2, "Terminal 2 - Quirino Hwy");
 
     // Driver marker
     if (jeepIconResolved) {
-        driverMarker = L.marker(irisanTerminal1, { icon: jeepIconResolved }).addTo(map);
+        driverMarker = L.marker(terminal1, { icon: jeepIconResolved }).addTo(map);
     } else {
-        driverMarker = L.circleMarker(irisanTerminal1, { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+        driverMarker = L.circleMarker(terminal1, { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
     }
+}
 
-    // Route line
-    L.Routing.control({
-        waypoints: [L.latLng(irisanTerminal1[0], irisanTerminal1[1]), L.latLng(irisanTerminal2[0], irisanTerminal2[1])],
+function showRouteToDestination(fromLat, fromLng) {
+    if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
+    const dest = getSelectedDestination();
+    activeRouteControl = L.Routing.control({
+        waypoints: [L.latLng(fromLat, fromLng), L.latLng(dest[0], dest[1])],
         routeWhileDragging: false, show: false, addWaypoints: false, draggableWaypoints: false,
         lineOptions: { styles: [{ color: '#667eea', opacity: 0.7, weight: 5 }] }
     }).addTo(map);
@@ -305,6 +323,9 @@ async function startTrip() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
 
+    // Lock destination during trip
+    document.getElementById('destinationSelect').disabled = true;
+
     status = "On Route";
     updateStatusUI();
 
@@ -313,24 +334,28 @@ async function startTrip() {
         showToast('Failed to update status: ' + (result.error || 'Unknown error'), 'error');
     }
 
+    const dest = getSelectedDestination();
+    const destName = dest === terminal2 ? 'Terminal 2 - Quirino Hwy' : 'Terminal 1 - Irisan';
+    showToast('Trip started to ' + destName + '! GPS tracking active.', 'success');
+
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-play"></i> Start Trip';
-    showToast('Trip started! GPS tracking active.', 'success');
 
     if (navigator.geolocation) {
         updateGPS(true);
-        // Send initial position immediately
+        // Send initial position immediately and show route
         navigator.geolocation.getCurrentPosition(
             async (pos) => {
                 const lat = pos.coords.latitude, lng = pos.coords.longitude;
                 driverMarker.setLatLng([lat, lng]);
                 map.setView([lat, lng], 15);
+                showRouteToDestination(lat, lng);
                 await apiUpdateLocation(loggedDriver.jeepneyId, loggedDriver.plate, lat, lng, "On Route");
             },
             (err) => { console.error("GPS error:", err); },
             { enableHighAccuracy: true }
         );
-        // Then track every 5s
+        // Track every 2 seconds for smooth real-time movement
         trackingInterval = setInterval(() => {
             navigator.geolocation.getCurrentPosition(
                 async (pos) => {
@@ -341,7 +366,7 @@ async function startTrip() {
                 (err) => { console.error("GPS error:", err); updateGPS(false); },
                 { enableHighAccuracy: true }
             );
-        }, 5000);
+        }, 2000);
     } else {
         showToast('GPS not available on this device', 'error');
         updateGPS(false);
@@ -363,7 +388,11 @@ async function endTrip() {
     }
 
     if (trackingInterval) { clearInterval(trackingInterval); trackingInterval = null; }
+    if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
     updateGPS(false);
+
+    // Unlock destination selector
+    document.getElementById('destinationSelect').disabled = false;
 
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-stop"></i> End Trip';

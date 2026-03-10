@@ -135,22 +135,40 @@ function setupNav() {
 }
 setupNav();
 
-const irisanTerminal = [16.4161384, 120.5573176];
-const quirinoTerminal = [16.4130536, 120.5934281];
+const terminal1 = [16.4161384, 120.5573176];   // Terminal 1 - Irisan
+const terminal2 = [16.429590, 120.549141];     // Terminal 2 - Quirino Hwy
 
-const map = L.map("map").setView(irisanTerminal, 14);
+const map = L.map("map").setView(terminal1, 14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
 // Icon fallbacks
 let jeepIconResolved = null;
-(function preloadJeepIcon() {
-    const img = new Image();
-    img.onload = () => { jeepIconResolved = L.icon({ iconUrl: 'jeep.png', iconSize: [32, 32], iconAnchor: [16, 16] }); };
-    img.onerror = () => { jeepIconResolved = null; };
-    img.src = 'jeep.png';
+let terminalIconResolved = null;
+(function preloadIcons() {
+    const jeepImg = new Image();
+    jeepImg.onload = () => { jeepIconResolved = L.icon({ iconUrl: 'jeep.png', iconSize: [32, 32], iconAnchor: [16, 16] }); };
+    jeepImg.onerror = () => { jeepIconResolved = null; };
+    jeepImg.src = 'jeep.png';
+
+    const termImg = new Image();
+    termImg.onload = () => { terminalIconResolved = L.icon({ iconUrl: 'terminal.png', iconSize: [55, 55], iconAnchor: [27, 55], popupAnchor: [0, -50] }); addTerminalMarkers(); };
+    termImg.onerror = () => { terminalIconResolved = null; addTerminalMarkers(); };
+    termImg.src = 'terminal.png';
 })();
+
+function addTerminalMarkers() {
+    function addTerminal(coords, label) {
+        if (terminalIconResolved) {
+            L.marker(coords, { icon: terminalIconResolved }).addTo(map).bindPopup("<b>" + label + "</b>");
+        } else {
+            L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
+        }
+    }
+    addTerminal(terminal1, "Terminal 1 - Irisan");
+    addTerminal(terminal2, "Terminal 2 - Quirino Hwy");
+}
 
 function makeJeepMarker(lat, lng) {
     if (jeepIconResolved) return L.marker([lat, lng], { icon: jeepIconResolved });
@@ -180,12 +198,15 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 function buildPopup(plate, status, lat, lng) {
-    const distance = getDistance(lat, lng, quirinoTerminal[0], quirinoTerminal[1]);
-    const eta = Math.round((distance / 25) * 60);
+    const dist1 = getDistance(lat, lng, terminal1[0], terminal1[1]);
+    const dist2 = getDistance(lat, lng, terminal2[0], terminal2[1]);
+    const eta1 = Math.round((dist1 / 25) * 60);
+    const eta2 = Math.round((dist2 / 25) * 60);
     const statusClass = status === 'On Route' ? 'on-route' : 'available';
     return '<div class="popup-plate"><i class="fas fa-bus" style="color:#667eea"></i> ' + plate + '</div>' +
         '<span class="popup-status ' + statusClass + '">' + status + '</span>' +
-        '<div class="popup-eta"><i class="fas fa-clock"></i> ETA: ~' + eta + ' min to Quirino</div>' +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + eta1 + ' min to Irisan</div>' +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + eta2 + ' min to Quirino Hwy</div>' +
         '<small style="color:#aaa"><i class="fas fa-route"></i> Tap for route</small>';
 }
 
@@ -220,7 +241,7 @@ async function loadLiveJeepneys() {
         });
 
         Object.keys(jeepMarkers).forEach(plate => {
-            if (!activePlates.has(plate) || (Date.now() - (jeepLastSeen[plate] || 0)) > 60000) {
+            if (!activePlates.has(plate) || (Date.now() - (jeepLastSeen[plate] || 0)) > 30000) {
                 map.removeLayer(jeepMarkers[plate]);
                 delete jeepMarkers[plate];
                 delete jeepLastSeen[plate];
@@ -239,7 +260,7 @@ async function loadLiveJeepneys() {
     }
 }
 
-setInterval(loadLiveJeepneys, 5000);
+setInterval(loadLiveJeepneys, 2000);
 loadLiveJeepneys();
 
 let subscription = null;
@@ -270,8 +291,12 @@ setInterval(() => {
 
 function showRoute(lat, lng) {
     if (activeRoute) map.removeControl(activeRoute);
+    // Show route to nearest terminal
+    const dist1 = getDistance(lat, lng, terminal1[0], terminal1[1]);
+    const dist2 = getDistance(lat, lng, terminal2[0], terminal2[1]);
+    const nearest = dist1 < dist2 ? terminal1 : terminal2;
     activeRoute = L.Routing.control({
-        waypoints: [L.latLng(lat, lng), L.latLng(quirinoTerminal[0], quirinoTerminal[1])],
+        waypoints: [L.latLng(lat, lng), L.latLng(nearest[0], nearest[1])],
         routeWhileDragging: false, addWaypoints: false, draggableWaypoints: false, show: false,
         lineOptions: { styles: [{ color: '#667eea', weight: 5, opacity: 0.8 }] }
     }).addTo(map);
