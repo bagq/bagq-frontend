@@ -42,6 +42,20 @@ app.get('/api/health', (req, res) => {
 // =============================================
 app.post('/api/register', async (req, res) => {
   try {
+    // Only dispatchers (moderators) can create accounts
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ success: false, error: 'Authentication required. Only moderators can create accounts.' });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: moderator }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !moderator) {
+      return res.status(401).json({ success: false, error: 'Invalid session. Please log in again.' });
+    }
+    if (moderator.user_metadata?.role !== 'dispatcher') {
+      return res.status(403).json({ success: false, error: 'Access denied. Only moderators can create accounts.' });
+    }
+
     const { email, password, fullName, username, role, plateNumber, seatingCapacity, jeepneyType } = req.body;
 
     if (!email || !password || !fullName || !username || !role) {
@@ -206,9 +220,24 @@ app.get('/api/jeepneys/:plate', async (req, res) => {
   }
 });
 
-// Get all live locations
+// Get all live locations (only for jeepneys currently "On Route")
 app.get('/api/locations', async (req, res) => {
   try {
+    // Get plates that are currently On Route from jeepneys table (source of truth)
+    const { data: activeJeepneys, error: jeepError } = await supabaseAdmin
+      .from('jeepneys')
+      .select('plate_number')
+      .eq('status', 'On Route');
+
+    if (jeepError) throw jeepError;
+
+    const activePlates = new Set((activeJeepneys || []).map(j => j.plate_number));
+
+    // If no active jeepneys, return empty
+    if (activePlates.size === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
     const { data, error } = await supabaseAdmin
       .from('jeepney_locations')
       .select('*')
@@ -216,10 +245,10 @@ app.get('/api/locations', async (req, res) => {
 
     if (error) throw error;
 
-    // Group by plate_number and get the latest
+    // Group by plate_number, get the latest, but ONLY for active jeepneys
     const latestLocations = {};
     data.forEach(location => {
-      if (!latestLocations[location.plate_number]) {
+      if (!latestLocations[location.plate_number] && activePlates.has(location.plate_number)) {
         latestLocations[location.plate_number] = location;
       }
     });

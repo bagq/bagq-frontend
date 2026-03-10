@@ -137,9 +137,9 @@ body {
 
 <div class="card-auth">
 
-<div class="logo"><i class="fas fa-bus"></i></div>
-<h4 class="text-center mb-1">Create Account</h4>
-<p class="subtitle">Join BAG-Q to track jeepneys in real-time</p>
+<div class="logo"><i class="fas fa-user-shield"></i></div>
+<h4 class="text-center mb-1">Register New User</h4>
+<p class="subtitle">Moderator Panel — Create accounts for drivers and commuters</p>
 
 <form id="registerForm">
 
@@ -211,8 +211,7 @@ body {
 </button>
 
 <p class="text-center mt-3 mb-0" style="font-size:0.9rem">
-Already have an account?
-<a href="login.html" class="auth-link">Sign In</a>
+<a href="index.html" class="auth-link"><i class="fas fa-arrow-left"></i> Back to Map</a>
 </p>
 
 </form>
@@ -221,13 +220,18 @@ Already have an account?
 <script type="module">
 const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
-// Session check - use localStorage instead of broken profiles table
+// Only dispatchers (moderators) can access registration
 const storedUser = localStorage.getItem("currentUser");
-if (storedUser) {
-    const user = JSON.parse(storedUser);
-    const role = user.user_metadata?.role;
-    if (role === 'driver') window.location.href = 'driver.html';
-    else window.location.href = 'index.html';
+const storedSession = localStorage.getItem("supabaseSession");
+if (!storedUser || !storedSession) {
+    document.querySelector('.card-auth').innerHTML = '<div class="logo"><i class="fas fa-lock" style="color:#dc3545"></i></div><h4 class="text-center mb-2">Access Restricted</h4><p class="subtitle">Only moderators (dispatchers) can create accounts.</p><a href="login.html" class="btn btn-login w-100"><i class="fas fa-sign-in-alt"></i> Log in as Moderator</a>';
+    throw new Error('Not logged in');
+}
+const currentUser = JSON.parse(storedUser);
+const currentSession = JSON.parse(storedSession);
+if (currentUser.user_metadata?.role !== 'dispatcher') {
+    document.querySelector('.card-auth').innerHTML = '<div class="logo"><i class="fas fa-ban" style="color:#dc3545"></i></div><h4 class="text-center mb-2">Access Denied</h4><p class="subtitle">Only moderators (dispatchers) can create new accounts. Your role: <strong>' + (currentUser.user_metadata?.role || 'unknown') + '</strong></p><a href="index.html" class="btn btn-login w-100"><i class="fas fa-arrow-left"></i> Back to Map</a>';
+    throw new Error('Not a dispatcher');
 }
 
 // Toast system
@@ -299,7 +303,10 @@ document.getElementById("registerForm").addEventListener("submit", async e => {
     try {
         const response = await fetch(API_URL + '/api/register', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + currentSession.access_token
+            },
             body: JSON.stringify({ email, password, fullName, username, role, plateNumber, seatingCapacity, jeepneyType })
         });
 
@@ -310,7 +317,8 @@ document.getElementById("registerForm").addEventListener("submit", async e => {
         }
 
         showToast('Account created successfully!', 'success');
-        setTimeout(() => { window.location.href = "login.html"; }, 1500);
+        document.getElementById('registerForm').reset();
+        document.getElementById('driverFields').style.display = 'none';
 
     } catch (err) {
         showToast(err.message || 'Registration failed. Make sure the server is running.', 'error');
