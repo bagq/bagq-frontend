@@ -215,7 +215,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 <!-- Terminal Queue Panels -->
 <div class="terminal-queue-panel left" id="townQueuePanel">
     <div class="tqp-header" onclick="toggleQueuePanel('town')">
-        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Town Terminal</span>
+        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Bonifacio (Town) Terminal</span>
         <span class="tqp-count" id="townQueueCount">0</span>
         <i class="fas fa-chevron-down tqp-toggle"></i>
     </div>
@@ -226,7 +226,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 
 <div class="terminal-queue-panel right" id="cypressQueuePanel">
     <div class="tqp-header" onclick="toggleQueuePanel('cypress')">
-        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Cypress Terminal</span>
+        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Irisan Terminal</span>
         <span class="tqp-count" id="cypressQueueCount">0</span>
         <i class="fas fa-chevron-down tqp-toggle"></i>
     </div>
@@ -249,7 +249,7 @@ import { supabase, subscribeToLocations } from './supabase-client.js';
 const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
 // Terminal coordinates
-const TOWN = [16.4161384, 120.5573176];
+const TOWN = [16.412996, 120.593461];
 const CYPRESS = [16.429639, 120.549139];
 
 function showToast(message, type = 'info') {
@@ -360,8 +360,8 @@ function addTerminalMarkers() {
     function addTerminal(coords, label) {
         L.marker(coords, { icon: terminalIcon }).addTo(map).bindPopup("<b>" + label + "</b>");
     }
-    addTerminal(TOWN, "Town Terminal");
-    addTerminal(CYPRESS, "Cypress Terminal");
+    addTerminal(TOWN, "Bonifacio (Town) Terminal");
+    addTerminal(CYPRESS, "Irisan Terminal");
 }
 addTerminalMarkers();
 
