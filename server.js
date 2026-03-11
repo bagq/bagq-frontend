@@ -49,7 +49,7 @@ app.get('/api/health', (req, res) => {
 // =============================================
 app.post('/api/register', async (req, res) => {
   try {
-    // Only dispatchers (moderators) can create accounts
+    // Only moderators can create accounts
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       return res.status(401).json({ success: false, error: 'Authentication required. Only moderators can create accounts.' });
@@ -59,7 +59,7 @@ app.post('/api/register', async (req, res) => {
     if (authErr || !moderator) {
       return res.status(401).json({ success: false, error: 'Invalid session. Please log in again.' });
     }
-    if (moderator.user_metadata?.role !== 'dispatcher') {
+    if (moderator.user_metadata?.role !== 'moderator') {
       return res.status(403).json({ success: false, error: 'Access denied. Only moderators can create accounts.' });
     }
 
@@ -438,6 +438,42 @@ app.get('/api/profile/:userId', async (req, res) => {
 });
 
 // =============================================
+// LIST ALL USERS (moderator only)
+// =============================================
+app.get('/api/users', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    if (user.user_metadata?.role !== 'moderator') {
+      return res.status(403).json({ success: false, error: 'Access denied. Moderator role required.' });
+    }
+
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const userData = users.map(u => ({
+      id: u.id,
+      email: u.email,
+      username: u.user_metadata?.username || '',
+      full_name: u.user_metadata?.full_name || '',
+      role: u.user_metadata?.role || 'unknown',
+      plate_number: u.user_metadata?.plate_number || null,
+      created_at: u.created_at
+    }));
+
+    res.json({ success: true, data: userData });
+  } catch (error) {
+    console.error('Error listing users:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
 // TERMINAL QUEUE MANAGEMENT
 // =============================================
 
@@ -674,6 +710,7 @@ if (!process.env.VERCEL) {
     console.log('  PATCH /api/jeepneys/:plate/status');
     console.log('  GET  /api/profile/:userId');
     console.log('  GET  /api/jeepneys/all');
+    console.log('  GET  /api/users');
     console.log('  GET  /api/terminal-queue');
     console.log('  POST /api/terminal-queue');
     console.log('  DELETE /api/terminal-queue/:plate');

@@ -152,10 +152,11 @@ body {
 <div class="mb-2">
 <label class="form-label" for="role"><i class="fas fa-id-badge"></i> Role</label>
 <select id="role" class="form-select" required>
-<option value="">Select your role</option>
+<option value="">Select role</option>
 <option value="commuter">Commuter</option>
 <option value="driver">Driver</option>
 <option value="dispatcher">Dispatcher</option>
+<option value="moderator">Moderator</option>
 </select>
 <div class="field-error" id="role-error"></div>
 </div>
@@ -229,9 +230,9 @@ if (!storedUser || !storedSession) {
 }
 const currentUser = JSON.parse(storedUser);
 const currentSession = JSON.parse(storedSession);
-if (currentUser.user_metadata?.role !== 'dispatcher') {
-    document.querySelector('.card-auth').innerHTML = '<div class="logo"><i class="fas fa-ban" style="color:#dc3545"></i></div><h4 class="text-center mb-2">Access Denied</h4><p class="subtitle">Only moderators (dispatchers) can create new accounts. Your role: <strong>' + (currentUser.user_metadata?.role || 'unknown') + '</strong></p><a href="index.html" class="btn btn-login w-100"><i class="fas fa-arrow-left"></i> Back to Map</a>';
-    throw new Error('Not a dispatcher');
+if (currentUser.user_metadata?.role !== 'moderator') {
+    document.querySelector('.card-auth').innerHTML = '<div class="logo"><i class="fas fa-ban" style="color:#dc3545"></i></div><h4 class="text-center mb-2">Access Denied</h4><p class="subtitle">Only moderators can create new accounts. Your role: <strong>' + (currentUser.user_metadata?.role || 'unknown') + '</strong></p><a href="index.html" class="btn btn-login w-100"><i class="fas fa-arrow-left"></i> Back to Map</a>';
+    throw new Error('Not a moderator');
 }
 
 // Toast system

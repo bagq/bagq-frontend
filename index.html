@@ -273,6 +273,7 @@ function setupNav() {
         let html = '<span class="text-white me-2 d-none d-sm-inline" style="font-size:0.85rem;opacity:0.9"><i class="fas fa-user-circle"></i> ' + name + '</span>';
         if (meta.role === 'driver') html += '<a href="driver.html" class="btn btn-light btn-sm"><i class="fas fa-gauge-high"></i> Dashboard</a> ';
         if (meta.role === 'dispatcher') html += '<a href="dispatcher.html" class="btn btn-light btn-sm"><i class="fas fa-headset"></i> Dispatch</a> ';
+        if (meta.role === 'moderator') html += '<a href="moderator.html" class="btn btn-light btn-sm"><i class="fas fa-user-shield"></i> Moderator</a> ';
         html += '<button class="btn btn-outline-light btn-sm" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>';
         nav.innerHTML = html;
         document.getElementById('logoutBtn').addEventListener('click', () => {

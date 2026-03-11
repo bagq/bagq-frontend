@@ -133,6 +133,7 @@ if (stored) {
     const role = user.user_metadata?.role;
     if (role === 'driver') window.location.href = 'driver.html';
     else if (role === 'dispatcher') window.location.href = 'dispatcher.html';
+    else if (role === 'moderator') window.location.href = 'moderator.html';
     else window.location.href = 'index.html';
 }
 
@@ -214,6 +215,7 @@ document.getElementById("loginForm").addEventListener("submit", async e => {
         setTimeout(() => {
             if (result.profile.role === "driver") window.location.href = "driver.html";
             else if (result.profile.role === "dispatcher") window.location.href = "dispatcher.html";
+            else if (result.profile.role === "moderator") window.location.href = "moderator.html";
             else window.location.href = "index.html";
         }, 1000);
 
