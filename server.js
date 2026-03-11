@@ -147,7 +147,7 @@ app.get('/api/lookup-email', async (req, res) => {
 // =============================================
 app.post('/api/login', async (req, res) => {
   try {
-    const { input, password } = req.body;
+    const { input, password, plate_number } = req.body;
     if (!input || !password) return res.status(400).json({ success: false, error: 'Missing credentials' });
 
     // Resolve email from username if needed
@@ -165,9 +165,9 @@ app.post('/api/login', async (req, res) => {
 
     const meta = data.user.user_metadata;
 
-    // If driver, get jeepney info from registered plate
+    // If driver, get jeepney info — use plate from login form first, then metadata
     let jeepney = null;
-    const plateToUse = meta?.plate_number;
+    const plateToUse = plate_number || meta?.plate_number;
     if (meta?.role === 'driver' && plateToUse) {
       const { data: jeepData } = await supabaseAdmin
         .from('jeepneys')
