@@ -83,6 +83,119 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 .popup-eta i { color: #667eea; }
 .popup-direction { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: #eef2ff; color: #667eea; font-weight: 600; font-size: 0.82rem; display: inline-block; }
 .popup-direction i { margin-right: 4px; }
+.popup-type { margin-top: 4px; font-size: 0.82rem; color: #666; }
+.popup-type i { margin-right: 4px; }
+.popup-capacity { font-size: 0.82rem; color: #666; }
+.popup-capacity i { margin-right: 4px; color: #667eea; }
+
+/* Terminal Queue Panels */
+.terminal-queue-panel {
+    position: fixed;
+    bottom: 16px;
+    z-index: 2100;
+    width: 260px;
+    max-height: 340px;
+    background: rgba(30, 30, 50, 0.88);
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+    color: #fff;
+    font-size: 0.82rem;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+.terminal-queue-panel.collapsed {
+    max-height: 42px;
+}
+.terminal-queue-panel.left {
+    left: 16px;
+}
+.terminal-queue-panel.right {
+    right: 16px;
+}
+.tqp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255,255,255,0.08);
+    border-radius: 14px 14px 0 0;
+}
+.terminal-queue-panel.collapsed .tqp-header {
+    border-radius: 14px;
+}
+.tqp-header .tqp-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.tqp-header .tqp-count {
+    background: rgba(255,255,255,0.15);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.tqp-header .tqp-toggle {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    transition: transform 0.3s;
+}
+.terminal-queue-panel.collapsed .tqp-toggle {
+    transform: rotate(180deg);
+}
+.tqp-body {
+    padding: 8px 14px 12px;
+    overflow-y: auto;
+    max-height: 280px;
+}
+.tqp-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.tqp-item:last-child {
+    border-bottom: none;
+}
+.tqp-item-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.tqp-item-plate {
+    font-weight: 600;
+    flex: 1;
+}
+.tqp-item-cap {
+    font-size: 0.72rem;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+.tqp-empty {
+    opacity: 0.5;
+    text-align: center;
+    padding: 12px 0;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .terminal-queue-panel {
+        width: calc(50% - 20px);
+        bottom: 70px;
+        max-height: 260px;
+        font-size: 0.75rem;
+    }
+    .terminal-queue-panel.left { left: 8px; }
+    .terminal-queue-panel.right { right: 8px; }
+    .tqp-header { padding: 8px 10px; }
+    .tqp-body { max-height: 200px; padding: 6px 10px 10px; }
+}
 </style>
 </head>
 
@@ -98,6 +211,37 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 
 <div id="jeepCounter"><i class="fas fa-bus-alt"></i> Jeepneys on Road: <span id="jeepCount">0</span></div>
 <div id="map"></div>
+
+<!-- Terminal Queue Panels -->
+<div class="terminal-queue-panel left" id="townQueuePanel">
+    <div class="tqp-header" onclick="toggleQueuePanel('town')">
+        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Town Terminal</span>
+        <span class="tqp-count" id="townQueueCount">0</span>
+        <i class="fas fa-chevron-down tqp-toggle"></i>
+    </div>
+    <div class="tqp-body" id="townQueueBody">
+        <div class="tqp-empty">No jeepneys queued</div>
+    </div>
+</div>
+
+<div class="terminal-queue-panel right" id="cypressQueuePanel">
+    <div class="tqp-header" onclick="toggleQueuePanel('cypress')">
+        <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Cypress Terminal</span>
+        <span class="tqp-count" id="cypressQueueCount">0</span>
+        <i class="fas fa-chevron-down tqp-toggle"></i>
+    </div>
+    <div class="tqp-body" id="cypressQueueBody">
+        <div class="tqp-empty">No jeepneys queued</div>
+    </div>
+</div>
+
+<script>
+// Global toggle function for queue panels (outside module scope for onclick)
+function toggleQueuePanel(terminal) {
+    const panelId = terminal === 'town' ? 'townQueuePanel' : 'cypressQueuePanel';
+    document.getElementById(panelId).classList.toggle('collapsed');
+}
+</script>
 
 <script type="module">
 import { supabase, subscribeToLocations } from './supabase-client.js';
@@ -128,7 +272,7 @@ function setupNav() {
         const name = meta.username || user.email;
         let html = '<span class="text-white me-2 d-none d-sm-inline" style="font-size:0.85rem;opacity:0.9"><i class="fas fa-user-circle"></i> ' + name + '</span>';
         if (meta.role === 'driver') html += '<a href="driver.html" class="btn btn-light btn-sm"><i class="fas fa-gauge-high"></i> Dashboard</a> ';
-        if (meta.role === 'dispatcher') html += '<a href="register.html" class="btn btn-light btn-sm"><i class="fas fa-user-plus"></i> Register</a> ';
+        if (meta.role === 'dispatcher') html += '<a href="dispatcher.html" class="btn btn-light btn-sm"><i class="fas fa-headset"></i> Dispatch</a> ';
         html += '<button class="btn btn-outline-light btn-sm" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>';
         nav.innerHTML = html;
         document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -146,36 +290,84 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-// Icon preload
-let jeepIconResolved = null;
-let terminalIconResolved = null;
-(function preloadIcons() {
-    const jeepImg = new Image();
-    jeepImg.onload = () => { jeepIconResolved = L.icon({ iconUrl: 'jeep.png', iconSize: [32, 32], iconAnchor: [16, 16] }); };
-    jeepImg.onerror = () => { jeepIconResolved = null; };
-    jeepImg.src = 'jeep.png';
+// --- SVG Icon Definitions ---
 
-    const termImg = new Image();
-    termImg.onload = () => { terminalIconResolved = L.icon({ iconUrl: 'terminal.png', iconSize: [55, 55], iconAnchor: [27, 55], popupAnchor: [0, -50] }); addTerminalMarkers(); };
-    termImg.onerror = () => { terminalIconResolved = null; addTerminalMarkers(); };
-    termImg.src = 'terminal.png';
-})();
+// Traditional Jeepney (orange) - 32x32
+const traditionalJeepSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+    '<rect x="4" y="8" width="24" height="14" rx="3" fill="#f97316" stroke="#c2410c" stroke-width="1.5"/>' +
+    '<rect x="6" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/>' +
+    '<rect x="13" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/>' +
+    '<rect x="20" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/>' +
+    '<rect x="2" y="18" width="28" height="4" rx="1" fill="#ea580c"/>' +
+    '<circle cx="9" cy="24" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/>' +
+    '<circle cx="23" cy="24" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/>' +
+    '<rect x="14" y="5" width="4" height="4" rx="1" fill="#fbbf24" stroke="#c2410c" stroke-width="0.5"/>' +
+    '<line x1="2" y1="14" x2="4" y2="14" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>' +
+    '<line x1="28" y1="14" x2="30" y2="14" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>' +
+    '</svg>';
+
+// Modern Jeepney / Bus (blue) - 32x32
+const modernJeepSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+    '<rect x="3" y="6" width="26" height="18" rx="4" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1.5"/>' +
+    '<rect x="5" y="8" width="8" height="6" rx="2" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/>' +
+    '<rect x="15" y="8" width="8" height="6" rx="2" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/>' +
+    '<rect x="24" y="9" width="3" height="4" rx="1" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/>' +
+    '<rect x="3" y="19" width="26" height="4" rx="1" fill="#2563eb"/>' +
+    '<circle cx="9" cy="26" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/>' +
+    '<circle cx="23" cy="26" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/>' +
+    '<rect x="5" y="16" width="22" height="2" rx="0.5" fill="#60a5fa"/>' +
+    '<circle cx="6" cy="21" r="1.5" fill="#fbbf24"/>' +
+    '<circle cx="26" cy="21" r="1.5" fill="#ef4444"/>' +
+    '</svg>';
+
+// Terminal (green) - 48x48
+const terminalSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">' +
+    '<rect x="8" y="12" width="32" height="30" rx="3" fill="#22c55e" stroke="#15803d" stroke-width="2"/>' +
+    '<polygon points="24,4 6,14 42,14" fill="#16a34a" stroke="#15803d" stroke-width="1.5"/>' +
+    '<rect x="12" y="16" width="8" height="8" rx="1" fill="#dcfce7" stroke="#15803d" stroke-width="0.8"/>' +
+    '<rect x="28" y="16" width="8" height="8" rx="1" fill="#dcfce7" stroke="#15803d" stroke-width="0.8"/>' +
+    '<rect x="18" y="28" width="12" height="14" rx="1" fill="#15803d"/>' +
+    '<text x="24" y="24" text-anchor="middle" font-size="7" font-weight="bold" fill="#fff" font-family="Arial,sans-serif">T</text>' +
+    '</svg>';
+
+// Create Leaflet icons from SVGs
+const traditionalJeepIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(traditionalJeepSvg),
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
+});
+
+const modernJeepIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(modernJeepSvg),
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
+});
+
+const terminalIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(terminalSvg),
+    iconSize: [48, 48],
+    iconAnchor: [24, 48],
+    popupAnchor: [0, -44]
+});
+
+// Small inline SVG strings for queue panel type badges
+const miniTraditionalSvg = 'data:image/svg+xml;base64,' + btoa(traditionalJeepSvg);
+const miniModernSvg = 'data:image/svg+xml;base64,' + btoa(modernJeepSvg);
 
 function addTerminalMarkers() {
     function addTerminal(coords, label) {
-        if (terminalIconResolved) {
-            L.marker(coords, { icon: terminalIconResolved }).addTo(map).bindPopup("<b>" + label + "</b>");
-        } else {
-            L.circleMarker(coords, { radius: 12, fillColor: '#667eea', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map).bindPopup("<b>" + label + "</b>");
-        }
+        L.marker(coords, { icon: terminalIcon }).addTo(map).bindPopup("<b>" + label + "</b>");
     }
     addTerminal(TOWN, "Town Terminal");
     addTerminal(CYPRESS, "Cypress Terminal");
 }
+addTerminalMarkers();
 
-function makeJeepMarker(lat, lng) {
-    if (jeepIconResolved) return L.marker([lat, lng], { icon: jeepIconResolved });
-    return L.circleMarker([lat, lng], { radius: 10, fillColor: '#28a745', color: '#fff', weight: 2, fillOpacity: 0.9 });
+function makeJeepMarker(lat, lng, jeepneyType) {
+    const icon = jeepneyType === 'modern' ? modernJeepIcon : traditionalJeepIcon;
+    return L.marker([lat, lng], { icon: icon });
 }
 
 // User location
@@ -200,7 +392,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function buildPopup(plate, status, lat, lng, destination) {
+function buildPopup(plate, status, lat, lng, destination, jeepneyType, seatingCapacity) {
     const distTown = getDistance(lat, lng, TOWN[0], TOWN[1]);
     const distCypress = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
     const etaTown = Math.max(1, Math.round((distTown / 25) * 60));
@@ -214,8 +406,18 @@ function buildPopup(plate, status, lat, lng, destination) {
         directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-left"></i> On the way to Town</div>';
     }
 
+    const typeLabel = jeepneyType === 'modern' ? 'Modern' : 'Traditional';
+    const typeColor = jeepneyType === 'modern' ? '#3b82f6' : '#f97316';
+    const typeIcon = jeepneyType === 'modern' ? 'fa-bus' : 'fa-shuttle-van';
+    let typeHtml = '<div class="popup-type"><i class="fas ' + typeIcon + '" style="color:' + typeColor + '"></i> ' + typeLabel + ' Jeepney</div>';
+    let capHtml = '';
+    if (seatingCapacity) {
+        capHtml = '<div class="popup-capacity"><i class="fas fa-users"></i> Capacity: ' + seatingCapacity + ' seats</div>';
+    }
+
     return '<div class="popup-plate"><i class="fas fa-bus" style="color:#667eea"></i> ' + plate + '</div>' +
         '<span class="popup-status ' + statusClass + '">' + status + '</span>' +
+        typeHtml + capHtml +
         directionHtml +
         '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaTown + ' min to Town</div>' +
         '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaCypress + ' min to Cypress</div>' +
@@ -250,6 +452,8 @@ function smoothMove(marker, newLat, newLng, duration) {
 let jeepMarkers = {};
 let jeepLastSeen = {};
 let jeepDestinations = {}; // Track destinations for each plate
+let jeepTypes = {}; // Track jeepney types for each plate
+let jeepCapacities = {}; // Track seating capacities for each plate
 let activeRoute = null;
 
 async function loadLiveJeepneys() {
@@ -267,19 +471,27 @@ async function loadLiveJeepneys() {
             activePlates.add(loc.plate_number);
             jeepLastSeen[loc.plate_number] = Date.now();
             if (loc.destination) jeepDestinations[loc.plate_number] = loc.destination;
+            if (loc.jeepney_type) jeepTypes[loc.plate_number] = loc.jeepney_type;
+            if (loc.seating_capacity) jeepCapacities[loc.plate_number] = loc.seating_capacity;
+
+            const jType = loc.jeepney_type || jeepTypes[loc.plate_number] || 'traditional';
 
             if (!jeepMarkers[loc.plate_number]) {
-                jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude).addTo(map);
+                jeepMarkers[loc.plate_number] = makeJeepMarker(loc.latitude, loc.longitude, jType).addTo(map);
                 jeepMarkers[loc.plate_number].on("click", () => {
                     const pos = jeepMarkers[loc.plate_number].getLatLng();
                     showRoute(pos.lat, pos.lng, loc.plate_number);
                 });
             } else {
+                // Update icon if type changed
+                const newIcon = jType === 'modern' ? modernJeepIcon : traditionalJeepIcon;
+                jeepMarkers[loc.plate_number].setIcon(newIcon);
                 // Smooth animation over 1.5 seconds
                 smoothMove(jeepMarkers[loc.plate_number], loc.latitude, loc.longitude, 1500);
             }
             jeepMarkers[loc.plate_number].bindPopup(
-                buildPopup(loc.plate_number, loc.status, loc.latitude, loc.longitude, jeepDestinations[loc.plate_number])
+                buildPopup(loc.plate_number, loc.status, loc.latitude, loc.longitude,
+                    jeepDestinations[loc.plate_number], jType, loc.seating_capacity || jeepCapacities[loc.plate_number])
             );
         });
 
@@ -289,6 +501,8 @@ async function loadLiveJeepneys() {
                 delete jeepMarkers[plate];
                 delete jeepLastSeen[plate];
                 delete jeepDestinations[plate];
+                delete jeepTypes[plate];
+                delete jeepCapacities[plate];
             }
         });
 
@@ -315,17 +529,25 @@ function setupRealtime() {
         document.getElementById('reconnectBanner').style.display = 'none';
         if (newLoc.status === "On Route") {
             jeepLastSeen[newLoc.plate_number] = Date.now();
+            if (newLoc.jeepney_type) jeepTypes[newLoc.plate_number] = newLoc.jeepney_type;
+            if (newLoc.seating_capacity) jeepCapacities[newLoc.plate_number] = newLoc.seating_capacity;
+
+            const jType = newLoc.jeepney_type || jeepTypes[newLoc.plate_number] || 'traditional';
+
             if (!jeepMarkers[newLoc.plate_number]) {
-                jeepMarkers[newLoc.plate_number] = makeJeepMarker(newLoc.latitude, newLoc.longitude).addTo(map);
+                jeepMarkers[newLoc.plate_number] = makeJeepMarker(newLoc.latitude, newLoc.longitude, jType).addTo(map);
                 jeepMarkers[newLoc.plate_number].on("click", () => {
                     const pos = jeepMarkers[newLoc.plate_number].getLatLng();
                     showRoute(pos.lat, pos.lng, newLoc.plate_number);
                 });
             } else {
+                const newIcon = jType === 'modern' ? modernJeepIcon : traditionalJeepIcon;
+                jeepMarkers[newLoc.plate_number].setIcon(newIcon);
                 smoothMove(jeepMarkers[newLoc.plate_number], newLoc.latitude, newLoc.longitude, 1500);
             }
             jeepMarkers[newLoc.plate_number].bindPopup(
-                buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude, jeepDestinations[newLoc.plate_number])
+                buildPopup(newLoc.plate_number, newLoc.status, newLoc.latitude, newLoc.longitude,
+                    jeepDestinations[newLoc.plate_number], jType, newLoc.seating_capacity || jeepCapacities[newLoc.plate_number])
             );
 
             const countEl = document.getElementById('jeepCount');
@@ -347,6 +569,8 @@ function setupRealtime() {
                 delete jeepMarkers[jeep.plate_number];
                 delete jeepLastSeen[jeep.plate_number];
                 delete jeepDestinations[jeep.plate_number];
+                delete jeepTypes[jeep.plate_number];
+                delete jeepCapacities[jeep.plate_number];
                 document.getElementById('jeepCount').textContent = Object.keys(jeepMarkers).length;
             }
         })
@@ -380,6 +604,49 @@ function showRoute(lat, lng, plate) {
         lineOptions: { styles: [{ color: '#667eea', weight: 5, opacity: 0.8 }] }
     }).addTo(map);
 }
+
+// --- Terminal Queue Panels ---
+async function loadTerminalQueues() {
+    try {
+        const res = await fetch(API_URL + '/api/terminal-queue');
+        const result = await res.json();
+        if (!result.success) { console.error("Terminal queue error:", result.error); return; }
+        const data = result.data;
+
+        renderQueuePanel('town', data.town || []);
+        renderQueuePanel('cypress', data.cypress || []);
+    } catch (err) {
+        console.error("loadTerminalQueues error:", err);
+    }
+}
+
+function renderQueuePanel(terminal, items) {
+    const countEl = document.getElementById(terminal + 'QueueCount');
+    const bodyEl = document.getElementById(terminal + 'QueueBody');
+
+    countEl.textContent = items.length;
+
+    if (items.length === 0) {
+        bodyEl.innerHTML = '<div class="tqp-empty">No jeepneys queued</div>';
+        return;
+    }
+
+    let html = '';
+    items.forEach(item => {
+        const iconSrc = item.jeepney_type === 'modern' ? miniModernSvg : miniTraditionalSvg;
+        const capText = item.seating_capacity ? item.seating_capacity + ' seats' : '';
+        html += '<div class="tqp-item">' +
+            '<img class="tqp-item-icon" src="' + iconSrc + '" alt="' + (item.jeepney_type || 'traditional') + '"/>' +
+            '<span class="tqp-item-plate">' + (item.plate_number || '---') + '</span>' +
+            '<span class="tqp-item-cap">' + capText + '</span>' +
+            '</div>';
+    });
+    bodyEl.innerHTML = html;
+}
+
+// Load terminal queues immediately and refresh every 5 seconds
+loadTerminalQueues();
+setInterval(loadTerminalQueues, 5000);
 </script>
 </body>
 </html>

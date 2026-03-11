@@ -70,6 +70,28 @@
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
 
+        .btn-queue {
+            border-radius: 10px; font-weight: 600; min-height: 42px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            background: #FF9800; border-color: #FF9800; color: #fff;
+        }
+        .btn-queue:hover { background: #e68a00; border-color: #e68a00; color: #fff; }
+
+        #queueStatus {
+            display: none; text-align: center; padding: 12px; margin-top: 8px;
+            background: #f0faf0; border: 2px solid #28a745; border-radius: 12px;
+        }
+        #queueStatus .queue-position {
+            font-size: 2rem; font-weight: 800; color: #28a745; line-height: 1.1;
+        }
+        #queueStatus .queue-label {
+            font-size: 0.85rem; color: #555; margin-top: 2px;
+        }
+        .btn-leave-queue {
+            font-size: 0.78rem; padding: 3px 12px; border-radius: 8px;
+            margin-top: 8px;
+        }
+
         #panelToggle {
             display: none; position: fixed; bottom: 20px; right: 20px;
             width: 52px; height: 52px; border-radius: 50%; border: none;
@@ -163,6 +185,12 @@
     </div>
 
     <div class="d-grid gap-2 mt-3">
+        <button id="queueBtn" class="btn btn-queue" onclick="queueAtTerminal()"><i class="fas fa-list-ol"></i> Queue at Terminal</button>
+        <div id="queueStatus">
+            <div class="queue-position" id="queuePosition">#-</div>
+            <div class="queue-label" id="queueLabel">in line at Terminal</div>
+            <button class="btn btn-outline-danger btn-leave-queue" onclick="leaveQueue()"><i class="fas fa-times"></i> Leave Queue</button>
+        </div>
         <button id="startBtn" class="btn btn-success btn-trip" onclick="startTrip()"><i class="fas fa-play"></i> Start Trip</button>
         <button id="endBtn" class="btn btn-danger btn-trip" onclick="endTrip()"><i class="fas fa-stop"></i> End Trip</button>
     </div>
@@ -258,27 +286,33 @@ async function apiUpdateLocation(jeepneyId, plateNumber, latitude, longitude, st
     }
 }
 
-// --- Icon preload with fallback ---
-function preloadIcon(src, size, anchor, popupAnchor) {
-    return new Promise(resolve => {
-        const img = new Image();
-        img.onload = () => resolve(L.icon({ iconUrl: src, iconSize: size, iconAnchor: anchor, popupAnchor: popupAnchor || [0, 0] }));
-        img.onerror = () => resolve(null);
-        img.src = src;
-    });
+// --- SVG Icon generation ---
+function createSvgIcon(svgStr, size, anchor, popupAnchor) {
+    try {
+        const iconUrl = 'data:image/svg+xml;base64,' + btoa(svgStr);
+        return L.icon({ iconUrl, iconSize: size, iconAnchor: anchor, popupAnchor: popupAnchor || [0, 0] });
+    } catch (e) {
+        console.error('SVG icon error:', e);
+        return null;
+    }
 }
 
-let jeepIconResolved = null;
-let terminalIconResolved = null;
+// Determine jeepney type from loggedDriver
+const driverJeepType = (loggedDriver && loggedDriver.jeepney_type) ? loggedDriver.jeepney_type : 'traditional';
 
-Promise.all([
-    preloadIcon('jeep.png', [32, 32], [16, 16]),
-    preloadIcon('terminal.png', [55, 55], [27, 55], [0, -50])
-]).then(([jeepIcon, termIcon]) => {
-    jeepIconResolved = jeepIcon;
-    terminalIconResolved = termIcon;
-    initMap();
-});
+// Traditional jeepney SVG (orange) - matches index.html
+const traditionalJeepSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="4" y="8" width="24" height="14" rx="3" fill="#f97316" stroke="#c2410c" stroke-width="1.5"/><rect x="6" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/><rect x="13" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/><rect x="20" y="10" width="6" height="5" rx="1" fill="#fef3c7" stroke="#c2410c" stroke-width="0.5"/><rect x="2" y="18" width="28" height="4" rx="1" fill="#ea580c"/><circle cx="9" cy="24" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/><circle cx="23" cy="24" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/><rect x="14" y="5" width="4" height="4" rx="1" fill="#fbbf24" stroke="#c2410c" stroke-width="0.5"/><line x1="2" y1="14" x2="4" y2="14" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/><line x1="28" y1="14" x2="30" y2="14" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/></svg>';
+
+// Modern jeepney SVG (blue) - matches index.html
+const modernJeepSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="3" y="6" width="26" height="18" rx="4" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1.5"/><rect x="5" y="8" width="8" height="6" rx="2" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/><rect x="15" y="8" width="8" height="6" rx="2" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/><rect x="24" y="9" width="3" height="4" rx="1" fill="#dbeafe" stroke="#1d4ed8" stroke-width="0.5"/><rect x="3" y="19" width="26" height="4" rx="1" fill="#2563eb"/><circle cx="9" cy="26" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/><circle cx="23" cy="26" r="3" fill="#374151" stroke="#9ca3af" stroke-width="1"/><rect x="5" y="16" width="22" height="2" rx="0.5" fill="#60a5fa"/><circle cx="6" cy="21" r="1.5" fill="#fbbf24"/><circle cx="26" cy="21" r="1.5" fill="#ef4444"/></svg>';
+
+// Terminal SVG (green building) - matches index.html
+const terminalSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="8" y="12" width="32" height="30" rx="3" fill="#22c55e" stroke="#15803d" stroke-width="2"/><polygon points="24,4 6,14 42,14" fill="#16a34a" stroke="#15803d" stroke-width="1.5"/><rect x="12" y="16" width="8" height="8" rx="1" fill="#dcfce7" stroke="#15803d" stroke-width="0.8"/><rect x="28" y="16" width="8" height="8" rx="1" fill="#dcfce7" stroke="#15803d" stroke-width="0.8"/><rect x="18" y="28" width="12" height="14" rx="1" fill="#15803d"/><text x="24" y="24" text-anchor="middle" font-size="7" font-weight="bold" fill="#fff" font-family="Arial,sans-serif">T</text></svg>';
+
+const jeepSvg = driverJeepType === 'modern' ? modernJeepSvg : traditionalJeepSvg;
+
+let jeepIconResolved = createSvgIcon(jeepSvg, [32, 32], [16, 16]);
+let terminalIconResolved = createSvgIcon(terminalSvg, [48, 48], [24, 48], [0, -44]);
 
 // Map setup
 const map = L.map("map", { zoomControl: true }).setView([16.422, 120.553], 14);
@@ -331,6 +365,8 @@ function initMap() {
     }
 }
 
+initMap();
+
 function showRouteToDestination(fromLat, fromLng) {
     if (activeRouteControl) { map.removeControl(activeRouteControl); activeRouteControl = null; }
     const dest = getDestCoords();
@@ -372,18 +408,26 @@ let sendInterval = null;
 let lastLat = null, lastLng = null;
 let currentStatus = "Available";
 
+// --- Queue state (declared early for updateStatusUI) ---
+let queuePollInterval = null;
+let isQueued = false;
+let queueTerminal = null;
+
 function updateStatusUI() {
     const el = document.getElementById("statusText");
     const startBtn = document.getElementById('startBtn');
     const endBtn = document.getElementById('endBtn');
+    const queueBtn = document.getElementById('queueBtn');
     if (currentStatus === "On Route") {
         el.textContent = "On Route"; el.className = "status-badge on-route";
         startBtn.disabled = true; startBtn.style.opacity = '0.5';
         endBtn.disabled = false; endBtn.style.opacity = '1';
+        if (queueBtn) queueBtn.style.display = 'none';
     } else {
         el.textContent = "Available"; el.className = "status-badge available";
         startBtn.disabled = false; startBtn.style.opacity = '1';
         endBtn.disabled = true; endBtn.style.opacity = '0.5';
+        if (queueBtn && !isQueued) queueBtn.style.display = 'flex';
     }
 }
 
@@ -401,6 +445,15 @@ async function startTrip() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
 
     document.getElementById('destinationSelect').disabled = true;
+
+    // Clear queue state if queued
+    if (isQueued) {
+        isQueued = false;
+        queueTerminal = null;
+        if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
+    }
+    updateQueueUI(null, null);
+    document.getElementById('queueBtn').style.display = 'none';
 
     currentStatus = "On Route";
     updateStatusUI();
@@ -485,12 +538,165 @@ async function endTrip() {
 
     document.getElementById('destinationSelect').disabled = false;
 
+    // Re-show queue button
+    const queueBtn = document.getElementById('queueBtn');
+    queueBtn.style.display = 'flex';
+    queueBtn.innerHTML = '<i class="fas fa-list-ol"></i> Queue at Terminal';
+    queueBtn.disabled = false;
+
     btn.innerHTML = '<i class="fas fa-stop"></i> End Trip';
     showToast('Trip ended.', 'info');
 }
 
+// --- Queue at Terminal ---
+
+function getClosestTerminal(lat, lng) {
+    const distToTown = getDistance(lat, lng, TOWN[0], TOWN[1]);
+    const distToCypress = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
+    return distToTown <= distToCypress ? 'town' : 'cypress';
+}
+
+function getTerminalDisplayName(terminal) {
+    return terminal === 'town' ? 'Town Terminal' : 'Cypress Terminal';
+}
+
+function updateQueueUI(position, terminal) {
+    const queueStatus = document.getElementById('queueStatus');
+    const queuePosition = document.getElementById('queuePosition');
+    const queueLabel = document.getElementById('queueLabel');
+    const queueBtn = document.getElementById('queueBtn');
+
+    if (position !== null && terminal) {
+        queueStatus.style.display = 'block';
+        queuePosition.textContent = '#' + position;
+        queueLabel.textContent = 'in line at ' + getTerminalDisplayName(terminal);
+        queueBtn.style.display = 'none';
+    } else {
+        queueStatus.style.display = 'none';
+        queueBtn.style.display = 'flex';
+    }
+}
+
+async function queueAtTerminal() {
+    if (!loggedDriver || isQueued || currentStatus === 'On Route') return;
+
+    const queueBtn = document.getElementById('queueBtn');
+    queueBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Joining queue...';
+    queueBtn.disabled = true;
+
+    try {
+        // Get current GPS position to determine closest terminal
+        const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+        });
+
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        queueTerminal = getClosestTerminal(lat, lng);
+
+        const res = await fetch(API_URL + '/api/terminal-queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ terminal: queueTerminal, plate_number: loggedDriver.plate })
+        });
+        const data = await res.json();
+
+        if (data.success || data.position) {
+            isQueued = true;
+            const position = data.position || 1;
+            updateQueueUI(position, queueTerminal);
+            showToast('Queued at ' + getTerminalDisplayName(queueTerminal) + ' - Position #' + position, 'success');
+
+            // Start polling for queue updates
+            startQueuePolling();
+        } else {
+            showToast('Failed to join queue: ' + (data.error || 'Unknown error'), 'error');
+            queueBtn.innerHTML = '<i class="fas fa-list-ol"></i> Queue at Terminal';
+            queueBtn.disabled = false;
+        }
+    } catch (err) {
+        console.error('Queue error:', err);
+        showToast('Could not join queue. Check GPS and try again.', 'error');
+        queueBtn.innerHTML = '<i class="fas fa-list-ol"></i> Queue at Terminal';
+        queueBtn.disabled = false;
+    }
+}
+
+function startQueuePolling() {
+    if (queuePollInterval) clearInterval(queuePollInterval);
+
+    queuePollInterval = setInterval(async () => {
+        if (!isQueued || !loggedDriver) {
+            clearInterval(queuePollInterval);
+            queuePollInterval = null;
+            return;
+        }
+
+        try {
+            const res = await fetch(API_URL + '/api/terminal-queue?terminal=' + encodeURIComponent(queueTerminal));
+            const data = await res.json();
+
+            const queueArr = data.data && data.data[queueTerminal];
+            if (queueArr && Array.isArray(queueArr)) {
+                const myEntry = queueArr.find(entry => entry.plate_number === loggedDriver.plate);
+
+                if (myEntry) {
+                    // Still in queue - update position
+                    const position = queueArr.indexOf(myEntry) + 1;
+                    updateQueueUI(position, queueTerminal);
+                } else {
+                    // No longer in queue - check if dispatched
+                    isQueued = false;
+                    clearInterval(queuePollInterval);
+                    queuePollInterval = null;
+                    updateQueueUI(null, null);
+
+                    // Auto-start trip (dispatched by dispatcher)
+                    showToast("You've been dispatched! Starting trip...", 'success');
+
+                    // Set destination to opposite of queue terminal
+                    currentDestination = queueTerminal === 'town' ? 'cypress' : 'town';
+                    updateDestUI();
+
+                    // Small delay then start trip
+                    setTimeout(() => { startTrip(); }, 500);
+                }
+            }
+        } catch (err) {
+            console.error('Queue poll error:', err);
+        }
+    }, 3000);
+}
+
+async function leaveQueue() {
+    if (!loggedDriver || !isQueued) return;
+
+    try {
+        const res = await fetch(API_URL + '/api/terminal-queue/' + encodeURIComponent(loggedDriver.plate), {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+
+        isQueued = false;
+        queueTerminal = null;
+        if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
+        updateQueueUI(null, null);
+
+        const queueBtn = document.getElementById('queueBtn');
+        queueBtn.innerHTML = '<i class="fas fa-list-ol"></i> Queue at Terminal';
+        queueBtn.disabled = false;
+
+        showToast('Left the queue.', 'info');
+    } catch (err) {
+        console.error('Leave queue error:', err);
+        showToast('Error leaving queue. Try again.', 'error');
+    }
+}
+
 window.startTrip = startTrip;
 window.endTrip = endTrip;
+window.queueAtTerminal = queueAtTerminal;
+window.leaveQueue = leaveQueue;
 </script>
 
 </body>

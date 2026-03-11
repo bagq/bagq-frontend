@@ -26,6 +26,10 @@ let io = { emit: () => {} };
 // In-memory destination tracking (no DB schema change needed)
 const jeepneyDestinations = {};
 
+// In-memory terminal queue system
+// Structure: { town: [{ plate_number, driver_name, jeepney_type, seating_capacity, queued_at }], cypress: [...] }
+const terminalQueues = { town: [], cypress: [] };
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -143,7 +147,7 @@ app.get('/api/lookup-email', async (req, res) => {
 // =============================================
 app.post('/api/login', async (req, res) => {
   try {
-    const { input, password, plate_number } = req.body;
+    const { input, password } = req.body;
     if (!input || !password) return res.status(400).json({ success: false, error: 'Missing credentials' });
 
     // Resolve email from username if needed
@@ -161,10 +165,9 @@ app.post('/api/login', async (req, res) => {
 
     const meta = data.user.user_metadata;
 
-    // If driver, get jeepney info
-    // Use plate_number from login form if provided, otherwise fall back to user_metadata
+    // If driver, get jeepney info from registered plate
     let jeepney = null;
-    const plateToUse = plate_number || meta?.plate_number;
+    const plateToUse = meta?.plate_number;
     if (meta?.role === 'driver' && plateToUse) {
       const { data: jeepData } = await supabaseAdmin
         .from('jeepneys')
@@ -188,6 +191,36 @@ app.post('/api/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get ALL jeepneys (not just on-route) with driver info
+app.get('/api/jeepneys/all', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('jeepneys')
+      .select('*');
+
+    if (error) throw error;
+
+    // Enrich with driver names from auth users
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const driverMap = {};
+    users.forEach(u => {
+      if (u.user_metadata?.plate_number) {
+        driverMap[u.user_metadata.plate_number] = u.user_metadata.full_name || u.user_metadata.username || 'Unknown';
+      }
+    });
+
+    const enriched = (data || []).map(j => ({
+      ...j,
+      driver_name: driverMap[j.plate_number] || 'Unknown'
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    console.error('Error fetching all jeepneys:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -228,10 +261,10 @@ app.get('/api/jeepneys/:plate', async (req, res) => {
 // Get all live locations (only for jeepneys currently "On Route")
 app.get('/api/locations', async (req, res) => {
   try {
-    // Get plates that are currently On Route from jeepneys table (source of truth)
+    // Get jeepneys currently On Route with details (source of truth)
     const { data: activeJeepneys, error: jeepError } = await supabaseAdmin
       .from('jeepneys')
-      .select('plate_number')
+      .select('plate_number, jeepney_type, seating_capacity')
       .eq('status', 'On Route');
 
     if (jeepError) throw jeepError;
@@ -245,6 +278,12 @@ app.get('/api/locations', async (req, res) => {
 
     const activePlatesArr = Array.from(activePlates);
 
+    // Build a map of jeepney details (type, capacity)
+    const jeepDetailMap = {};
+    (activeJeepneys || []).forEach(j => {
+      jeepDetailMap[j.plate_number] = { jeepney_type: j.jeepney_type, seating_capacity: j.seating_capacity };
+    });
+
     const { data, error } = await supabaseAdmin
       .from('jeepney_locations')
       .select('*')
@@ -253,11 +292,14 @@ app.get('/api/locations', async (req, res) => {
 
     if (error) throw error;
 
-    // Group by plate_number, get the latest for each, enrich with destination
+    // Group by plate_number, get the latest for each, enrich with destination and details
     const latestLocations = {};
     data.forEach(location => {
       if (!latestLocations[location.plate_number]) {
         location.destination = jeepneyDestinations[location.plate_number] || null;
+        const details = jeepDetailMap[location.plate_number] || {};
+        location.jeepney_type = details.jeepney_type || 'traditional';
+        location.seating_capacity = details.seating_capacity || 16;
         latestLocations[location.plate_number] = location;
       }
     });
@@ -336,6 +378,10 @@ app.patch('/api/jeepneys/:plate/status', async (req, res) => {
     // Clear destination when trip ends
     if (status !== 'On Route') {
       delete jeepneyDestinations[plate];
+      // Also remove from any terminal queue
+      for (const t of ['town', 'cypress']) {
+        terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate);
+      }
     }
 
     io.emit('status-update', {
@@ -389,6 +435,146 @@ app.get('/api/profile/:userId', async (req, res) => {
     console.error('Error fetching profile:', error);
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// =============================================
+// TERMINAL QUEUE MANAGEMENT
+// =============================================
+
+// Get terminal queues
+app.get('/api/terminal-queue', (req, res) => {
+  res.json({ success: true, data: terminalQueues });
+});
+
+// Join terminal queue
+app.post('/api/terminal-queue', async (req, res) => {
+  try {
+    const { terminal, plate_number } = req.body;
+    if (!terminal || !plate_number) {
+      return res.status(400).json({ success: false, error: 'Missing terminal or plate_number' });
+    }
+    if (!terminalQueues[terminal]) {
+      return res.status(400).json({ success: false, error: 'Invalid terminal. Use "town" or "cypress"' });
+    }
+
+    // Remove from any existing queue first
+    for (const t of ['town', 'cypress']) {
+      terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate_number);
+    }
+
+    // Get jeepney details from DB
+    const { data: jeepData } = await supabaseAdmin
+      .from('jeepneys')
+      .select('*')
+      .eq('plate_number', plate_number)
+      .single();
+
+    // Get driver name
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const driver = users.find(u => u.user_metadata?.plate_number === plate_number);
+    const driverName = driver?.user_metadata?.full_name || driver?.user_metadata?.username || 'Unknown';
+
+    const queueEntry = {
+      plate_number,
+      driver_name: driverName,
+      jeepney_type: jeepData?.jeepney_type || 'traditional',
+      seating_capacity: jeepData?.seating_capacity || 16,
+      queued_at: new Date().toISOString()
+    };
+
+    terminalQueues[terminal].push(queueEntry);
+
+    // Update jeepney status to Available (at terminal)
+    await supabaseAdmin
+      .from('jeepneys')
+      .update({ status: 'Available' })
+      .eq('plate_number', plate_number);
+
+    io.emit('queue-update', { terminal, queues: terminalQueues });
+
+    const position = terminalQueues[terminal].length;
+    res.json({ success: true, position, data: terminalQueues });
+  } catch (error) {
+    console.error('Queue join error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Leave terminal queue
+app.delete('/api/terminal-queue/:plate', (req, res) => {
+  const plate = req.params.plate;
+  for (const t of ['town', 'cypress']) {
+    terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate);
+  }
+  io.emit('queue-update', { queues: terminalQueues });
+  res.json({ success: true, data: terminalQueues });
+});
+
+// Dispatcher dispatches a jeepney (remove from queue, set On Route)
+app.patch('/api/terminal-queue/:plate/dispatch', async (req, res) => {
+  try {
+    const plate = req.params.plate;
+    const { destination } = req.body;
+
+    // Find which terminal the jeepney is in
+    let fromTerminal = null;
+    for (const t of ['town', 'cypress']) {
+      const idx = terminalQueues[t].findIndex(j => j.plate_number === plate);
+      if (idx !== -1) {
+        fromTerminal = t;
+        terminalQueues[t].splice(idx, 1);
+        break;
+      }
+    }
+
+    if (!fromTerminal) {
+      return res.status(404).json({ success: false, error: 'Jeepney not found in any queue' });
+    }
+
+    // Set destination (opposite terminal by default)
+    const dest = destination || (fromTerminal === 'town' ? 'cypress' : 'town');
+    jeepneyDestinations[plate] = dest;
+
+    // Update status to On Route
+    await supabaseAdmin
+      .from('jeepneys')
+      .update({ status: 'On Route' })
+      .eq('plate_number', plate);
+
+    io.emit('queue-update', { queues: terminalQueues });
+    io.emit('dispatch', { plate_number: plate, from: fromTerminal, destination: dest });
+
+    res.json({ success: true, from: fromTerminal, destination: dest, data: terminalQueues });
+  } catch (error) {
+    console.error('Dispatch error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Dispatcher reorder queue
+app.patch('/api/terminal-queue/:terminal/reorder', (req, res) => {
+  const { terminal } = req.params;
+  const { plate_numbers } = req.body; // ordered array of plate numbers
+
+  if (!terminalQueues[terminal]) {
+    return res.status(400).json({ success: false, error: 'Invalid terminal' });
+  }
+
+  const currentEntries = {};
+  terminalQueues[terminal].forEach(entry => {
+    currentEntries[entry.plate_number] = entry;
+  });
+
+  const reordered = [];
+  plate_numbers.forEach(plate => {
+    if (currentEntries[plate]) {
+      reordered.push(currentEntries[plate]);
+    }
+  });
+
+  terminalQueues[terminal] = reordered;
+  io.emit('queue-update', { terminal, queues: terminalQueues });
+  res.json({ success: true, data: terminalQueues });
 });
 
 // Get routes
@@ -487,6 +673,12 @@ if (!process.env.VERCEL) {
     console.log('  POST /api/locations');
     console.log('  PATCH /api/jeepneys/:plate/status');
     console.log('  GET  /api/profile/:userId');
+    console.log('  GET  /api/jeepneys/all');
+    console.log('  GET  /api/terminal-queue');
+    console.log('  POST /api/terminal-queue');
+    console.log('  DELETE /api/terminal-queue/:plate');
+    console.log('  PATCH /api/terminal-queue/:plate/dispatch');
+    console.log('  PATCH /api/terminal-queue/:terminal/reorder');
     console.log('  GET  /api/routes');
     console.log('===========================================');
   });
