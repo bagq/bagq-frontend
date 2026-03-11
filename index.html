@@ -224,13 +224,13 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
     </div>
 </div>
 
-<div class="terminal-queue-panel right" id="cypressQueuePanel">
-    <div class="tqp-header" onclick="toggleQueuePanel('cypress')">
+<div class="terminal-queue-panel right" id="irisanQueuePanel">
+    <div class="tqp-header" onclick="toggleQueuePanel('irisan')">
         <span class="tqp-title"><i class="fas fa-building" style="color:#4ade80"></i> Irisan Terminal</span>
-        <span class="tqp-count" id="cypressQueueCount">0</span>
+        <span class="tqp-count" id="irisanQueueCount">0</span>
         <i class="fas fa-chevron-down tqp-toggle"></i>
     </div>
-    <div class="tqp-body" id="cypressQueueBody">
+    <div class="tqp-body" id="irisanQueueBody">
         <div class="tqp-empty">No jeepneys queued</div>
     </div>
 </div>
@@ -238,7 +238,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 <script>
 // Global toggle function for queue panels (outside module scope for onclick)
 function toggleQueuePanel(terminal) {
-    const panelId = terminal === 'town' ? 'townQueuePanel' : 'cypressQueuePanel';
+    const panelId = terminal === 'town' ? 'townQueuePanel' : 'irisanQueuePanel';
     document.getElementById(panelId).classList.toggle('collapsed');
 }
 </script>
@@ -250,7 +250,7 @@ const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' :
 
 // Terminal coordinates
 const TOWN = [16.412996, 120.593461];
-const CYPRESS = [16.429639, 120.549139];
+const IRISAN = [16.429367, 120.549379];
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -285,7 +285,7 @@ function setupNav() {
 }
 setupNav();
 
-const map = L.map("map").setView([16.422, 120.553], 14);
+const map = L.map("map").setView([16.421, 120.571], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
@@ -361,7 +361,7 @@ function addTerminalMarkers() {
         L.marker(coords, { icon: terminalIcon }).addTo(map).bindPopup("<b>" + label + "</b>");
     }
     addTerminal(TOWN, "Bonifacio (Town) Terminal");
-    addTerminal(CYPRESS, "Irisan Terminal");
+    addTerminal(IRISAN, "Irisan Terminal");
 }
 addTerminalMarkers();
 
@@ -394,14 +394,14 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 function buildPopup(plate, status, lat, lng, destination, jeepneyType, seatingCapacity) {
     const distTown = getDistance(lat, lng, TOWN[0], TOWN[1]);
-    const distCypress = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
+    const distIrisan = getDistance(lat, lng, IRISAN[0], IRISAN[1]);
     const etaTown = Math.max(1, Math.round((distTown / 25) * 60));
-    const etaCypress = Math.max(1, Math.round((distCypress / 25) * 60));
+    const etaIrisan = Math.max(1, Math.round((distIrisan / 25) * 60));
     const statusClass = status === 'On Route' ? 'on-route' : 'available';
 
     let directionHtml = '';
-    if (destination === 'cypress') {
-        directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-right"></i> On the way to Cypress</div>';
+    if (destination === 'irisan') {
+        directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-right"></i> On the way to Irisan</div>';
     } else if (destination === 'town') {
         directionHtml = '<div class="popup-direction"><i class="fas fa-arrow-left"></i> On the way to Town</div>';
     }
@@ -420,7 +420,7 @@ function buildPopup(plate, status, lat, lng, destination, jeepneyType, seatingCa
         typeHtml + capHtml +
         directionHtml +
         '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaTown + ' min to Town</div>' +
-        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaCypress + ' min to Cypress</div>' +
+        '<div class="popup-eta"><i class="fas fa-clock"></i> ~' + etaIrisan + ' min to Irisan</div>' +
         '<small style="color:#aaa"><i class="fas fa-route"></i> Tap for route</small>';
 }
 
@@ -592,11 +592,11 @@ function showRoute(lat, lng, plate) {
     // Use jeepney's destination if known, otherwise nearest terminal
     let dest;
     if (plate && jeepDestinations[plate]) {
-        dest = jeepDestinations[plate] === 'cypress' ? CYPRESS : TOWN;
+        dest = jeepDestinations[plate] === 'irisan' ? IRISAN : TOWN;
     } else {
         const dist1 = getDistance(lat, lng, TOWN[0], TOWN[1]);
-        const dist2 = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
-        dest = dist1 < dist2 ? TOWN : CYPRESS;
+        const dist2 = getDistance(lat, lng, IRISAN[0], IRISAN[1]);
+        dest = dist1 < dist2 ? TOWN : IRISAN;
     }
     activeRoute = L.Routing.control({
         waypoints: [L.latLng(lat, lng), L.latLng(dest[0], dest[1])],
@@ -614,7 +614,7 @@ async function loadTerminalQueues() {
         const data = result.data;
 
         renderQueuePanel('town', data.town || []);
-        renderQueuePanel('cypress', data.cypress || []);
+        renderQueuePanel('irisan', data.irisan || []);
     } catch (err) {
         console.error("loadTerminalQueues error:", err);
     }

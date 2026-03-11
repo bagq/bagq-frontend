@@ -27,8 +27,8 @@ let io = { emit: () => {} };
 const jeepneyDestinations = {};
 
 // In-memory terminal queue system
-// Structure: { town: [{ plate_number, driver_name, jeepney_type, seating_capacity, queued_at }], cypress: [...] }
-const terminalQueues = { town: [], cypress: [] };
+// Structure: { town: [{ plate_number, driver_name, jeepney_type, seating_capacity, queued_at }], irisan: [...] }
+const terminalQueues = { town: [], irisan: [] };
 
 // Middleware
 app.use(cors());
@@ -102,8 +102,8 @@ app.post('/api/register', async (req, res) => {
           seating_capacity: parseInt(seatingCapacity) || 16,
           jeepney_type: jeepneyType || 'traditional',
           status: 'Available',
-          lat: 16.4161384,
-          lng: 120.5573176
+          lat: 16.412996,
+          lng: 120.593461
         }]);
 
       if (jeepError) {
@@ -379,7 +379,7 @@ app.patch('/api/jeepneys/:plate/status', async (req, res) => {
     if (status !== 'On Route') {
       delete jeepneyDestinations[plate];
       // Also remove from any terminal queue
-      for (const t of ['town', 'cypress']) {
+      for (const t of ['town', 'irisan']) {
         terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate);
       }
     }
@@ -454,11 +454,11 @@ app.post('/api/terminal-queue', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing terminal or plate_number' });
     }
     if (!terminalQueues[terminal]) {
-      return res.status(400).json({ success: false, error: 'Invalid terminal. Use "town" or "cypress"' });
+      return res.status(400).json({ success: false, error: 'Invalid terminal. Use "town" or "irisan"' });
     }
 
     // Remove from any existing queue first
-    for (const t of ['town', 'cypress']) {
+    for (const t of ['town', 'irisan']) {
       terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate_number);
     }
 
@@ -503,7 +503,7 @@ app.post('/api/terminal-queue', async (req, res) => {
 // Leave terminal queue
 app.delete('/api/terminal-queue/:plate', (req, res) => {
   const plate = req.params.plate;
-  for (const t of ['town', 'cypress']) {
+  for (const t of ['town', 'irisan']) {
     terminalQueues[t] = terminalQueues[t].filter(j => j.plate_number !== plate);
   }
   io.emit('queue-update', { queues: terminalQueues });
@@ -518,7 +518,7 @@ app.patch('/api/terminal-queue/:plate/dispatch', async (req, res) => {
 
     // Find which terminal the jeepney is in
     let fromTerminal = null;
-    for (const t of ['town', 'cypress']) {
+    for (const t of ['town', 'irisan']) {
       const idx = terminalQueues[t].findIndex(j => j.plate_number === plate);
       if (idx !== -1) {
         fromTerminal = t;
@@ -532,7 +532,7 @@ app.patch('/api/terminal-queue/:plate/dispatch', async (req, res) => {
     }
 
     // Set destination (opposite terminal by default)
-    const dest = destination || (fromTerminal === 'town' ? 'cypress' : 'town');
+    const dest = destination || (fromTerminal === 'town' ? 'irisan' : 'town');
     jeepneyDestinations[plate] = dest;
 
     // Update status to On Route

@@ -163,13 +163,13 @@
 
     <div class="info-row">
         <span class="label"><i class="fas fa-route"></i> Route</span>
-        <span style="font-weight:600;color:#2c3e50">Town ↔ Cypress</span>
+        <span style="font-weight:600;color:#2c3e50">Town ↔ Irisan</span>
     </div>
 
     <div class="mb-2">
         <label class="form-label" style="font-weight:600;font-size:0.85rem;color:#444;margin-bottom:4px"><i class="fas fa-map-marker-alt" style="color:#667eea;margin-right:4px"></i> Heading to</label>
         <select id="destinationSelect" class="form-select" style="min-height:40px;border-radius:10px;border:1.5px solid #e0e0e0;font-size:0.85rem">
-            <option value="cypress">Cypress Terminal</option>
+            <option value="irisan">Irisan Terminal</option>
             <option value="town">Town Terminal</option>
         </select>
     </div>
@@ -181,7 +181,7 @@
 
     <div class="info-row">
         <span class="label"><i class="fas fa-location-arrow"></i> Heading</span>
-        <span id="destBadge" class="dest-badge"><i class="fas fa-arrow-right"></i> Cypress</span>
+        <span id="destBadge" class="dest-badge"><i class="fas fa-arrow-right"></i> Irisan</span>
     </div>
 
     <div class="d-grid gap-2 mt-3">
@@ -212,8 +212,8 @@
 const API_URL = window.location.protocol === 'file:' ? 'http://localhost:3000' : '';
 
 // Terminal coordinates
-const TOWN = [16.4161384, 120.5573176];
-const CYPRESS = [16.429639, 120.549139];
+const TOWN = [16.412996, 120.593461];
+const IRISAN = [16.429367, 120.549379];
 const ARRIVAL_RADIUS_KM = 0.3; // 300 meters
 
 function showToast(message, type = 'info') {
@@ -315,7 +315,7 @@ let jeepIconResolved = createSvgIcon(jeepSvg, [32, 32], [16, 16]);
 let terminalIconResolved = createSvgIcon(terminalSvg, [48, 48], [24, 48], [0, -44]);
 
 // Map setup
-const map = L.map("map", { zoomControl: true }).setView([16.422, 120.553], 14);
+const map = L.map("map", { zoomControl: true }).setView([16.421, 120.571], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
@@ -323,15 +323,15 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 let driverMarker;
 let activeRouteControl = null;
 
-// Current destination: 'cypress' or 'town'
-let currentDestination = 'cypress';
+// Current destination: 'irisan' or 'town'
+let currentDestination = 'irisan';
 
 function getDestCoords() {
-    return currentDestination === 'cypress' ? CYPRESS : TOWN;
+    return currentDestination === 'irisan' ? IRISAN : TOWN;
 }
 
 function getDestName() {
-    return currentDestination === 'cypress' ? 'Cypress' : 'Town';
+    return currentDestination === 'irisan' ? 'Irisan' : 'Town';
 }
 
 function updateDestUI() {
@@ -356,7 +356,7 @@ function initMap() {
         }
     }
     addTerminal(TOWN, "Town Terminal");
-    addTerminal(CYPRESS, "Cypress Terminal");
+    addTerminal(IRISAN, "Irisan Terminal");
 
     if (jeepIconResolved) {
         driverMarker = L.marker(TOWN, { icon: jeepIconResolved }).addTo(map);
@@ -388,7 +388,7 @@ function checkArrival(lat, lng) {
         hasArrivedFlag = true;
         // Arrived at destination — switch to opposite terminal
         const arrivedAt = getDestName();
-        currentDestination = currentDestination === 'cypress' ? 'town' : 'cypress';
+        currentDestination = currentDestination === 'irisan' ? 'town' : 'irisan';
         updateDestUI();
         showToast('Arrived at ' + arrivedAt + '! Now heading to ' + getDestName(), 'info');
 
@@ -552,12 +552,12 @@ async function endTrip() {
 
 function getClosestTerminal(lat, lng) {
     const distToTown = getDistance(lat, lng, TOWN[0], TOWN[1]);
-    const distToCypress = getDistance(lat, lng, CYPRESS[0], CYPRESS[1]);
-    return distToTown <= distToCypress ? 'town' : 'cypress';
+    const distToIrisan = getDistance(lat, lng, IRISAN[0], IRISAN[1]);
+    return distToTown <= distToIrisan ? 'town' : 'irisan';
 }
 
 function getTerminalDisplayName(terminal) {
-    return terminal === 'town' ? 'Town Terminal' : 'Cypress Terminal';
+    return terminal === 'town' ? 'Town Terminal' : 'Irisan Terminal';
 }
 
 function updateQueueUI(position, terminal) {
@@ -655,7 +655,7 @@ function startQueuePolling() {
                     showToast("You've been dispatched! Starting trip...", 'success');
 
                     // Set destination to opposite of queue terminal
-                    currentDestination = queueTerminal === 'town' ? 'cypress' : 'town';
+                    currentDestination = queueTerminal === 'town' ? 'irisan' : 'town';
                     updateDestUI();
 
                     // Small delay then start trip
